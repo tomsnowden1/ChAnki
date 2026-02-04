@@ -1,34 +1,35 @@
 # ChAnki v2 - Production Dependencies
-# Core Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+
+# Core Framework (flexible versioning for compatibility)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
 
 # Database
-sqlalchemy==2.0.25
-alembic==1.13.1
+sqlalchemy>=2.0.25
+alembic>=1.13.1
 
 # AI & NLP
-google-generativeai==0.3.2
-jieba==0.42.1
-pypinyin==0.51.0
+google-generativeai>=0.3.2
+jieba>=0.42.1
+pypinyin>=0.51.0
 
 # HTTP & API
-requests==2.31.0
-httpx==0.26.0
+requests>=2.31.0
+httpx>=0.26.0
 
 # Audio Generation
-edge-tts==6.1.9
+edge-tts>=6.1.9
 
-# Data Validation
-pydantic==2.5.3
-pydantic-settings==2.1.0
+# Data Validation (let pydantic manage pydantic-core)
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
 
 # Utilities
-python-dotenv==1.0.0
+python-dotenv>=1.0.0
 
-# Production Server (for Railway deployment)
-gunicorn==21.2.0
+# Production Server (for Railway/Render deployment)
+gunicorn>=21.2.0
 
-# PostgreSQL Support (for Railway)
-psycopg2-binary==2.9.9
+# PostgreSQL Support (for Railway/Render/Supabase)
+psycopg2-binary>=2.9.9
