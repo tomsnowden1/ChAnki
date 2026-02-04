@@ -1,0 +1,34 @@
+# ChAnki v2 - Requirements
+# FastAPI-based Chinese-to-Anki application with persistence and audio
+
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+
+# Dictionary
+cedict-utils==0.0.13
+
+# Anki Integration
+requests==2.31.0
+
+# Audio Generation
+edge-tts==6.1.9
+
+# LLM (Gemini)
+google-generativeai==0.3.2
+
+# Utilities
+python-dotenv==1.0.0
+aiofiles==23.2.1
+pypinyin==0.51.0
+jieba==0.42.1
+
+# Development (optional)
+pytest==7.4.4
+httpx==0.26.0

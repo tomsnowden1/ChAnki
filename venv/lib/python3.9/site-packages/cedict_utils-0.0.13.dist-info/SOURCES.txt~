@@ -1,0 +1,16 @@
+LICENSE.txt
+MANIFEST.in
+Makefile
+README.rst
+requirements.txt
+setup.cfg
+setup.py
+tox.ini
+cedict_utils/cedict.py
+cedict_utils.egg-info/PKG-INFO
+cedict_utils.egg-info/SOURCES.txt
+cedict_utils.egg-info/dependency_links.txt
+cedict_utils.egg-info/requires.txt
+cedict_utils.egg-info/top_level.txt
+tests/__init__.py
+tests/test_cedict.py

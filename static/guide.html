@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Guide - ChAnki</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl font-bold gradient-bg bg-clip-text text-transparent mb-2">ChAnki Setup Guide</h1>
+            <p class="text-gray-600 text-lg">Get up and running in 3 easy steps</p>
+        </div>
+
+        <!-- Step 1 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div class="flex items-center gap-4 mb-4">
+                <div
+                    class="w-12 h-12 gradient-bg rounded-full flex items-center justify-center text-white text-xl font-bold">
+                    1</div>
+                <h2 class="text-3xl font-bold text-gray-800">Install AnkiConnect</h2>
+            </div>
+
+            <p class="text-gray-700 mb-4">
+                ChAnki needs AnkiConnect to communicate with your Anki application.
+            </p>
+
+            <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 mb-4">
+                <h3 class="font-semibold text-gray-800 mb-3">Installation Steps:</h3>
+                <ol class="list-decimal list-inside space-y-2 text-gray-700">
+                    <li>Open Anki</li>
+                    <li>Click <strong>Tools → Add-ons → Get Add-ons...</strong></li>
+                    <li>Enter this code: <code
+                            class="bg-purple-200 px-3 py-1 rounded font-mono text-lg">2055492159</code></li>
+                    <li>Click <strong>OK</strong></li>
+                    <li><strong>Restart Anki</strong></li>
+                </ol>
+            </div>
+
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                <p class="text-sm text-blue-900">
+                    <strong>💡 Tip:</strong> Anki Connect runs automatically when Anki is open. You'll see a green
+                    status indicator in ChAnki when connected.
+                </p>
+            </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div class="flex items-center gap-4 mb-4">
+                <div
+                    class="w-12 h-12 gradient-bg rounded-full flex items-center justify-center text-white text-xl font-bold">
+                    2</div>
+                <h2 class="text-3xl font-bold text-gray-800">Get Your Gemini API Key</h2>
+            </div>
+
+            <p class="text-gray-700 mb-4">
+                ChAnki uses Google's Gemini AI to generate contextual example sentences. It's free for personal use!
+            </p>
+
+            <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 mb-4">
+                <h3 class="font-semibold text-gray-800 mb-3">Get Your Key:</h3>
+                <ol class="list-decimal list-inside space-y-2 text-gray-700">
+                    <li>Visit <a href="https://makersuite.google.com/app/apikey" target="_blank"
+                            class="text-purple-600 hover:text-purple-800 underline">Google AI Studio</a></li>
+                    <li>Sign in with your Google account</li>
+                    <li>Click <strong>"Create API Key"</strong></li>
+                    <li>Copy your new API key</li>
+                    <li>Paste it into ChAnki Settings (⚙️ button)</li>
+                </ol>
+            </div>
+
+            <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+                <p class="text-sm text-yellow-900">
+                    <strong>⚡ Optional:</strong> ChAnki works without a Gemini key, but example sentences will use
+                    simple templates instead of AI-generated context.
+                </p>
+            </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div class="flex items-center gap-4 mb-4">
+                <div
+                    class="w-12 h-12 gradient-bg rounded-full flex items-center justify-center text-white text-xl font-bold">
+                    3</div>
+                <h2 class="text-3xl font-bold text-gray-800">Configure Your Deck</h2>
+            </div>
+
+            <p class="text-gray-700 mb-4">
+                Tell ChAnki which Anki deck to add cards to.
+            </p>
+
+            <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 mb-4">
+                <h3 class="font-semibold text-gray-800 mb-3">Setup:</h3>
+                <ol class="list-decimal list-inside space-y-2 text-gray-700">
+                    <li>In ChAnki, click the <strong>⚙️ Settings</strong> button</li>
+                    <li>Select your target deck from the dropdown (e.g., "Chinese::Vocabulary")</li>
+                    <li>Choose your target HSK level (1-6)</li>
+                    <li>Enable/disable audio generation</li>
+                    <li>Click <strong>Save Settings</strong></li>
+                </ol>
+            </div>
+
+            <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                <p class="text-sm text-green-900">
+                    <strong>✅ Done!</strong> You're all set. ChAnki will automatically create the "ChAnki-Master" note
+                    type if it doesn't exist.
+                </p>
+            </div>
+        </div>
+
+        <!-- Bonus Tips -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🎯 Pro Tips</h2>
+            <div class="space-y-3 text-gray-700">
+                <div class="flex gap-3">
+                    <span class="text-2xl">🔍</span>
+                    <p><strong>Smart Search:</strong> Type in English, Pinyin (with tones like "ni3 hao3"), or Chinese
+                        characters. ChAnki searches all formats!</p>
+                </div>
+                <div class="flex gap-3">
+                    <span class="text-2xl">🎴</span>
+                    <p><strong>Dual Cards:</strong> Each word creates 2 cards - one for recall (Hanzi → meaning) and one
+                        cloze deletion (sentence with hidden word).</p>
+                </div>
+                <div class="flex gap-3">
+                    <span class="text-2xl">🏷️</span>
+                    <p><strong>Auto-Tagged:</strong> Cards are tagged with "ChAnki", "HSK-{level}", and part of speech
+                        for easy filtering in Anki.</p>
+                </div>
+                <div class="flex gap-3">
+                    <span class="text-2xl">🔊</span>
+                    <p><strong>Audio:</strong> Enable audio in settings to get native pronunciation for words and
+                        sentences.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="text-center">
+            <a href="/"
+                class="inline-block px-8 py-4 gradient-bg text-white rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity shadow-lg">
+                🚀 Start Learning Chinese!
+            </a>
+        </div>
+
+        <div class="text-center mt-6 text-gray-500 text-sm">
+            Need help? Check the <a href="https://github.com" class="text-purple-600 hover:underline">GitHub
+                repository</a>
+        </div>
+    </div>
+</body>
+
+</html>
