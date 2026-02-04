@@ -89,11 +89,50 @@ async def add_to_anki(
     try:
         # Step 1: Check connection
         if not anki.check_connection():
-            return AddToAnkiResponse(
-                success=False,
-                status="error",
-                message="AnkiConnect is not running. Please start Anki."
+            # Cloud mode: Queue card for later sync
+            logger.info(f"AnkiConnect unavailable - queueing card for sync: {request.hanzi}")
+            
+            from app.models.card_queue import CardQueue
+            
+            # Generate sentence for queue (still need it for the card)
+            try:
+                sentences = gemini.generate_sentences(
+                    request.hanzi,
+                    request.pinyin,
+                    request.definition,
+                    settings.hsk_target_level
+                )
+                selected_sentence = sentences[0] if sentences else {}
+            except Exception as e:
+                logger.warning(f"Failed to generate sentence for queue: {e}")
+                selected_sentence = {}
+            
+            # Create queue entry
+            queue_card = CardQueue(
+                hanzi=request.hanzi,
+                pinyin=request.pinyin,
+                definition=request.definition,
+                sentence_hanzi=selected_sentence.get('sentence_simplified'),
+                sentence_pinyin=selected_sentence.get('sentence_pinyin'),
+                sentence_english=selected_sentence.get('sentence_english'),
+                hsk_level=request.hsk_level,
+                part_of_speech=request.part_of_speech,
+                status="pending"
             )
+            
+            db.add(queue_card)
+            db.commit()
+            
+            # Count pending cards
+            pending_count = db.query(CardQueue).filter(CardQueue.status == "pending").count()
+            
+            return AddToAnkiResponse(
+                success=True,
+                status="queued",
+                message=f"✅ '{request.hanzi}' queued for sync ({pending_count} pending). Will sync when you're home!",
+                note_id=None
+            )
+
         
         # Step 2: Check duplicates
         if anki.check_duplicate(request.hanzi, settings.anki_deck_name):

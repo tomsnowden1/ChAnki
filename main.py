@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from app.api import search, settings, anki, health
+from app.api import search, settings, anki, health, sync
 from app.db.session import init_db
 import logging
 
@@ -43,6 +43,7 @@ async def startup_event():
 
 # Include API routers
 app.include_router(health.router)  # Health monitoring - first priority
+app.include_router(sync.router, prefix="/api/sync", tags=["sync"])  # Cloud-sync endpoints
 app.include_router(search.router)
 app.include_router(settings.router)
 app.include_router(anki.router)

@@ -26,3 +26,9 @@ pydantic-settings==2.1.0
 
 # Utilities
 python-dotenv==1.0.0
+
+# Production Server (for Railway deployment)
+gunicorn==21.2.0
+
+# PostgreSQL Support (for Railway)
+psycopg2-binary==2.9.9

@@ -1,0 +1,7 @@
+{
+  "cloud_url": "http://localhost:5173",
+  "sync_secret": "CHANGE_THIS_TO_YOUR_SECRET",
+  "anki_url": "http://localhost:8765",
+  "poll_interval": 30,
+  "deck_name": "Chinese::Mining"
+}

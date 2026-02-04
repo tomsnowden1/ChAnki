@@ -1,14 +1,23 @@
 """Database session management"""
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from app.config import settings
 from app.models import Base
 from contextlib import contextmanager
 
-# Create engine
+# Get database URL from settings
+DATABASE_URL = settings.database_url
+
+# Fix PostgreSQL URL (Railway uses postgres://, SQLAlchemy needs postgresql://)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Create engine with appropriate settings
 engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {}
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    pool_pre_ping=True  # Verify connections before using them
 )
 
 # Create session factory
