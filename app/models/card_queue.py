@@ -1,7 +1,7 @@
 """Card Queue Model for Cloud-Sync Architecture"""
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
-from app.db.base import Base
+from app.models.settings import Base
 
 
 class CardQueue(Base):
