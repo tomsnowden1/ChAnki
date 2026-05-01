@@ -51,16 +51,33 @@ class DictionaryService:
         # Normalise for pinyin comparison before deciding strategy
         plain = _pinyin_plain(query)
 
-        # Try pinyin first if it looks like it (has vowels, short, no spaces indicating multi-word EN)
-        if self._looks_like_pinyin(query, plain):
-            results = self._search_pinyin(plain, query, limit)
-            if results:
-                return results
+        # Definitely pinyin: has tone digits (ni3) or tone diacritics (nǐ)
+        is_toned_pinyin = bool(re.search(r'\d', query)) or bool(
+            re.search(r'[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]', query.lower())
+        )
 
-        # English FTS search
-        results = self._search_english_fts(query, limit)
-        if results:
-            return results
+        if is_toned_pinyin:
+            # Unambiguous pinyin — pinyin-first, English as fallback
+            results = self._search_pinyin(plain, query, limit)
+            return results or self._search_english_fts(query, limit)
+
+        # Ambiguous (e.g. "fun", "mao", "love") — run English AND pinyin,
+        # return English-definition matches first for better relevance.
+        english_results = self._search_english_fts(query, limit)
+        if self._looks_like_pinyin(query, plain):
+            pinyin_results = self._search_pinyin(plain, query, limit)
+            # Merge: English first, then pinyin extras not already in English set
+            seen = {e.id for e in english_results if e.id}
+            merged = list(english_results)
+            for r in pinyin_results:
+                if r.id not in seen:
+                    merged.append(r)
+                    seen.add(r.id)
+            if merged:
+                return merged[:limit]
+
+        if english_results:
+            return english_results
 
         # Last resort: partial pinyin LIKE (catches e.g. "mao" matching "mao2ze2dong1")
         return self._search_pinyin_like(plain, limit)
