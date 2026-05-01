@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 from app.services.service_cache import get_gemini, get_settings, get_sentence_service
+from app.config import settings as env_settings
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 
@@ -36,8 +37,9 @@ async def generate_sentences(
     try:
         settings = get_settings(db)
         gemini = None
-        if settings and settings.gemini_api_key:
-            gemini = get_gemini(settings.gemini_api_key)
+        api_key = (settings.gemini_api_key if settings else "") or env_settings.gemini_api_key
+        if api_key:
+            gemini = get_gemini(api_key)
 
         service = get_sentence_service(db, gemini)
         sentences = service.find_sentences(

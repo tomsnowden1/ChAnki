@@ -104,9 +104,6 @@ function setupEventListeners() {
     document.getElementById('cancelSettings').addEventListener('click', closeSettingsModal);
     document.getElementById('settingsForm').addEventListener('submit', saveSettings);
 
-    // Test Key Button
-    document.getElementById('testGeminiBtn').addEventListener('click', testGeminiKey);
-
     // Load Decks Button
     document.getElementById('loadDecksBtn').addEventListener('click', loadDecks);
 
@@ -127,10 +124,12 @@ async function checkStatus() {
         const data = await response.json();
 
         const ankiOk = data.components.anki?.status === 'healthy';
+        const geminiOk = data.components.gemini?.status === 'healthy';
         updateStatusDot('dictStatus', data.components.database?.status === 'healthy');
-        updateStatusDot('geminiStatus', data.components.gemini?.status === 'healthy');
+        updateStatusDot('geminiStatus', geminiOk);
         updateStatusDot('ankiStatus', ankiOk);
         updateAnkiPanels(ankiOk);
+        updateGeminiSettingsPanel(geminiOk);
 
     } catch (error) {
         console.error('Health check failed:', error);
@@ -177,6 +176,16 @@ function updateAnkiPanels(isConnected) {
             label.className = 'text-sm text-gray-500';
             guide.classList.remove('hidden');
         }
+    }
+}
+
+function updateGeminiSettingsPanel(isOk) {
+    const dot = document.getElementById('geminiSettingsDot');
+    const label = document.getElementById('geminiSettingsLabel');
+    if (dot) dot.style.backgroundColor = isOk ? '#22c55e' : '#9ca3af';
+    if (label) {
+        label.textContent = isOk ? 'active' : 'not configured';
+        label.className = isOk ? 'ml-2 text-sm text-green-600' : 'ml-2 text-sm text-gray-500';
     }
 }
 

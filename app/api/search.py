@@ -5,6 +5,7 @@ from app.db.session import get_db_session
 from app.services.dictionary import DictionaryService
 from app.services.service_cache import get_gemini, get_settings
 from app.schemas.search import SearchResponse, DictionaryResult
+from app.config import settings as env_settings
 
 router = APIRouter(prefix="/api", tags=["search"])
 
@@ -18,7 +19,8 @@ async def search_dictionary(
     dict_service = DictionaryService(db)
 
     settings = get_settings(db)
-    gemini = get_gemini(settings.gemini_api_key if settings else "")
+    api_key = (settings.gemini_api_key if settings else "") or env_settings.gemini_api_key
+    gemini = get_gemini(api_key)
 
     entries, is_ai = dict_service.search_with_ai_fallback(q, gemini, limit=20)
     
