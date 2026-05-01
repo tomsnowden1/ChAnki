@@ -1,6 +1,6 @@
 """Dictionary search service — FTS5 for English, indexed pinyin_plain for pinyin, SQL for hanzi"""
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, case, func
 from app.db.session import engine
 from app.models.dictionary import DictionaryEntry
 from app.models.ai_cache import AICache
@@ -155,7 +155,7 @@ class DictionaryService:
         # 2. Prefix match on pinyin_plain (e.g. "ni" matches "ni3")
         prefix = self.db.query(DictionaryEntry).filter(
             DictionaryEntry.pinyin_plain.like(f'{plain}%')
-        ).order_by(DictionaryEntry.hsk_level).limit(limit).all()
+        ).order_by(*self._commonality_order()).limit(limit).all()
         if prefix:
             return prefix
 
@@ -164,10 +164,22 @@ class DictionaryService:
             DictionaryEntry.pinyin.ilike(f'%{original}%')
         ).limit(limit).all()
 
+    @staticmethod
+    def _commonality_order():
+        """
+        Sort expression: HSK level ascending (1=most common, null=rare),
+        then simplified length ascending (short words are simpler/more common).
+        Produces: 狗 before 一人得道，鸡犬升天 even with no HSK data.
+        """
+        return (
+            case((DictionaryEntry.hsk_level.isnot(None), DictionaryEntry.hsk_level), else_=99),
+            func.length(DictionaryEntry.simplified),
+        )
+
     def _search_pinyin_like(self, plain: str, limit: int) -> List[DictionaryEntry]:
         return self.db.query(DictionaryEntry).filter(
             DictionaryEntry.pinyin_plain.like(f'%{plain}%')
-        ).limit(limit).all()
+        ).order_by(*self._commonality_order()).limit(limit).all()
 
     def _search_english_fts(self, query: str, limit: int) -> List[DictionaryEntry]:
         """
@@ -178,7 +190,7 @@ class DictionaryService:
         if not _USE_FTS:
             return self.db.query(DictionaryEntry).filter(
                 DictionaryEntry.definitions.ilike(f'%{query.lower()}%')
-            ).limit(limit).all()
+            ).order_by(*self._commonality_order()).limit(limit).all()
 
         try:
             # Escape FTS5 special chars
