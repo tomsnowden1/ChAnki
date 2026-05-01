@@ -14,10 +14,17 @@ ENV/
 .env
 .env.local
 
-# Database  
+# Database
 *.db
 *.db-journal
 data/chanki.db
+
+# Seed data (downloaded at runtime)
+data/cedict_ts.u8
+data/tatoeba/
+
+# Local sync agent config (real values; .example is the template)
+sync_agent_config.json
 
 # IDE
 .vscode/

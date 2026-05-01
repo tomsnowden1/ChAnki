@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 from app.models.settings import AppSettings
 from app.schemas.settings import SettingsUpdate, SettingsResponse
+from app.services.service_cache import invalidate_settings, invalidate_gemini
 from pydantic import BaseModel
 from typing import Optional
 import logging
@@ -40,14 +41,21 @@ async def update_settings(
         settings = AppSettings()
         db.add(settings)
     
-    # Update only provided fields
     update_data = settings_update.model_dump(exclude_unset=True)
+    # Never overwrite the real key with the masked sentinel
+    from app.models.settings import AppSettings as _AS
+    if update_data.get('gemini_api_key') == _AS.KEY_SET_SENTINEL:
+        update_data.pop('gemini_api_key')
     for field, value in update_data.items():
         setattr(settings, field, value)
     
     db.commit()
     db.refresh(settings)
-    
+
+    invalidate_settings()
+    if settings_update.gemini_api_key is not None:
+        invalidate_gemini()
+
     return SettingsResponse(**settings.to_dict())
 
 

@@ -12,10 +12,11 @@ class DictionaryEntry(Base):
     traditional = Column(String, nullable=False, index=True)
     simplified = Column(String, nullable=False, index=True)
     pinyin = Column(String, nullable=False, index=True)
-    definitions = Column(Text, nullable=False, index=True)  # JSON array stored as text
+    pinyin_plain = Column(String, nullable=True, index=True)  # lowercase, no tones/spaces e.g. "nihao"
+    definitions = Column(Text, nullable=False)  # JSON array stored as text
     hsk_level = Column(Integer, nullable=True, index=True)
-    classifier = Column(String, nullable=True)  # Measure word (e.g., 个, 只)
-    part_of_speech = Column(String, nullable=True)  # noun, verb, adjective, etc.
+    classifier = Column(String, nullable=True)
+    part_of_speech = Column(String, nullable=True)
 
     
     def to_dict(self):
@@ -33,12 +34,12 @@ class DictionaryEntry(Base):
     @staticmethod
     def from_cedict(traditional, simplified, pinyin, definitions_list):
         """Create entry from CEDICT data"""
+        import re
+        plain = re.sub(r'[\d\s]', '', pinyin.lower())
         return DictionaryEntry(
             traditional=traditional,
             simplified=simplified,
             pinyin=pinyin,
+            pinyin_plain=plain,
             definitions=json.dumps(definitions_list),
-            hsk_level=None,
-            classifier=None,
-            part_of_speech=None
         )

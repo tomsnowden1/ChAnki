@@ -30,15 +30,23 @@ app.add_middleware(ErrorHandlerMiddleware)
 async def startup_event():
     """Initialize database on application startup"""
     logger.info("Initializing ChAnki v2.0...")
-    from app.db.init_db import initialize_database, check_and_download_dictionary
-    
-    initialize_database()
+    from app.db.init_db import (
+        initialize_database,
+        check_and_download_dictionary,
+        check_and_seed_sentences,
+    )
+
+    initialize_database()  # also calls setup_fts
     logger.info("✓ Database initialized")
-    
+
     # Self-healing: Check and auto-seed dictionary if needed
     db_status = check_and_download_dictionary(auto_seed=True)
     logger.info(db_status["message"])
-    
+
+    # Sentence corpus must run after the dictionary seed so jieba filtering works
+    sent_status = check_and_seed_sentences(auto_seed=True)
+    logger.info(sent_status["message"])
+
     logger.info("✓ ChAnki v2.0 ready!")
 
 # Include API routers

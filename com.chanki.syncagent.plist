@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Local sync agent autostart for ChAnki.
+
+  Install:
+    cp com.chanki.syncagent.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.chanki.syncagent.plist
+
+  Inspect:
+    launchctl list | grep chanki
+    tail -f /tmp/chanki-syncagent.log
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.chanki.syncagent.plist
+    rm ~/Library/LaunchAgents/com.chanki.syncagent.plist
+
+  Before loading, edit sync_agent_config.json with the real Render URL +
+  SYNC_SECRET (must match the value set in the Render dashboard).
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.chanki.syncagent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/jess/ChAnki/local_sync_agent.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jess/ChAnki</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/chanki-syncagent.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/chanki-syncagent.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

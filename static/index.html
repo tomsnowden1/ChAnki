@@ -5,7 +5,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChAnki v2 - Chinese to Anki Bridge</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="ChAnki">
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Prevent flash of unstyled content while Tailwind JIT injects styles -->
+    <style id="fouc-guard">body { visibility: hidden }</style>
+    <script>
+        tailwind.config = {};
+        document.addEventListener('DOMContentLoaded', () => {
+            requestAnimationFrame(() => {
+                document.getElementById('fouc-guard').remove();
+            });
+        });
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -86,9 +102,14 @@
 
         <!-- Search Bar -->
         <div class="bg-white rounded-2xl shadow-xl p-6 mb-8">
-            <input type="text" id="searchInput" placeholder="Enter English, Pinyin, or 汉字..."
-                class="w-full px-6 py-4 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none text-lg transition-colors"
-                autocomplete="off">
+            <div class="relative">
+                <input type="text" id="searchInput" placeholder="Enter English, Pinyin, or 汉字..."
+                    class="w-full pl-6 pr-14 py-4 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none text-lg transition-colors"
+                    autocomplete="off">
+                <button id="voiceBtn" type="button"
+                    class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-2xl px-2 py-1 rounded-lg hover:bg-purple-50 transition-colors"
+                    aria-label="Voice search">🎤</button>
+            </div>
             <div id="searchingIndicator" class="debounce-indicator opacity-0 text-sm text-gray-500 mt-2">
                 Searching...
             </div>
@@ -119,13 +140,21 @@
                 <p id="selectedDefinition" class="text-xl text-gray-700"></p>
             </div>
 
+            <!-- Generate button (shown before generation) -->
+            <div id="generatePrompt" class="mt-8 flex justify-center">
+                <button id="generateSentencesBtn"
+                    class="px-8 py-3 gradient-bg text-white rounded-xl font-semibold hover:opacity-90 transition-opacity shadow">
+                    ✨ Generate Example Sentences
+                </button>
+            </div>
+
             <!-- Generation Progress -->
-            <div id="generationProgress" class="mt-8 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl">
+            <div id="generationProgress" class="hidden mt-8 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl">
                 <div class="text-center">
                     <div
                         class="inline-block w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-3">
                     </div>
-                    <p id="progressText" class="text-gray-700 font-medium">Generating example sentence...</p>
+                    <p id="progressText" class="text-gray-700 font-medium">Generating example sentences...</p>
                 </div>
             </div>
 

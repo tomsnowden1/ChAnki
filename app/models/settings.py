@@ -19,12 +19,14 @@ class AppSettings(Base):
     generate_audio = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Sentinel returned to the frontend so it knows a key is set without seeing it
+    KEY_SET_SENTINEL = "••••••••"
+
     def to_dict(self):
-        """Convert model to dictionary"""
         return {
             "anki_deck_name": self.anki_deck_name,
             "anki_model_name": self.anki_model_name,
-            "gemini_api_key": self.gemini_api_key if self.gemini_api_key else "",
+            "gemini_api_key": self.KEY_SET_SENTINEL if self.gemini_api_key else "",
             "hsk_target_level": self.hsk_target_level,
             "tone_colors_enabled": self.tone_colors_enabled,
             "generate_audio": self.generate_audio,

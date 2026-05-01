@@ -6,33 +6,93 @@
 let currentSettings = null;
 let selectedWord = null;
 let debounceTimer = null;
+let searchAbortController = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     checkStatus();
     setupEventListeners();
-
-    // Check status periodically
-    setInterval(checkStatus, 10000);
+    setupVoiceInput();
 });
+
+// Register service worker (PWA)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/static/sw.js').catch((err) => {
+            console.warn('Service worker registration failed:', err);
+        });
+    });
+}
+
+// Voice input via Web Speech API (Mandarin)
+function setupVoiceInput() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const btn = document.getElementById('voiceBtn');
+    const input = document.getElementById('searchInput');
+    if (!SR || !btn || !input) return;  // Unsupported → keep button hidden
+
+    btn.classList.remove('hidden');
+
+    let recognition = null;
+    let listening = false;
+
+    btn.addEventListener('click', () => {
+        if (listening && recognition) {
+            recognition.stop();
+            return;
+        }
+        recognition = new SR();
+        recognition.lang = 'zh-CN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => {
+            listening = true;
+            btn.textContent = '🔴';
+            btn.setAttribute('aria-label', 'Stop voice search');
+        };
+        recognition.onend = () => {
+            listening = false;
+            btn.textContent = '🎤';
+            btn.setAttribute('aria-label', 'Voice search');
+        };
+        recognition.onerror = () => {
+            listening = false;
+            btn.textContent = '🎤';
+        };
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            input.value = transcript;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.focus();
+        };
+
+        try {
+            recognition.start();
+        } catch (e) {
+            console.warn('Voice recognition failed to start:', e);
+        }
+    });
+}
 
 // Event Listeners
 function setupEventListeners() {
-    // Search with debounce
+    // Search with debounce + abort-on-new-input
     document.getElementById('searchInput').addEventListener('input', (e) => {
         const query = e.target.value.trim();
 
         if (!query) {
             hideResults();
+            document.getElementById('searchingIndicator').style.opacity = '0';
             return;
         }
 
-        // Show searching indicator
         document.getElementById('searchingIndicator').style.opacity = '1';
 
-        // Debounce search (300ms)
         clearTimeout(debounceTimer);
+        if (searchAbortController) searchAbortController.abort();
+
         debounceTimer = setTimeout(() => {
             performSearch(query);
         }, 300);
@@ -52,10 +112,12 @@ function setupEventListeners() {
 
     // Add to Anki (Confirm selection)
     const addBtn = document.getElementById('addToAnkiBtn');
-    // Remove old listeners to avoid duplicates if any
     const newBtn = addBtn.cloneNode(true);
     addBtn.parentNode.replaceChild(newBtn, addBtn);
     newBtn.addEventListener('click', confirmAndAddToAnki);
+
+    // Generate sentences button
+    document.getElementById('generateSentencesBtn').addEventListener('click', startGenerating);
 }
 
 // Check health status and update UI indicators
@@ -121,24 +183,22 @@ async function loadSettings() {
     try {
         const response = await fetch('/api/settings');
         const settings = await response.json();
-
-        // Store in global state
         currentSettings = settings;
 
-        // Populate form if settings modal is visible
-        if (settings.gemini_api_key) {
-            const keyInput = document.getElementById('geminiKeyInput');
-            if (keyInput) keyInput.value = settings.gemini_api_key;
-        }
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+        const check = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
 
-        if (settings.anki_deck_name) {
-            const deckInput = document.getElementById('deckNameInput');
-            if (deckInput) deckInput.value = settings.anki_deck_name;
-        }
+        // Show placeholder if key is configured, never display the real value
+        const keyEl = document.getElementById('geminiKey');
+        if (keyEl) keyEl.placeholder = settings.gemini_api_key ? 'API key configured' : 'Enter your Gemini API key';
+        set('deckName', settings.anki_deck_name);
+        set('modelName', settings.anki_model_name);
+        set('hskLevel', settings.hsk_target_level);
+        check('toneColors', settings.tone_colors_enabled);
+        check('generateAudio', settings.generate_audio);
 
     } catch (e) {
         console.error('Failed to load settings:', e);
-        // Continue silently - settings are optional for basic functionality
     }
 }
 
@@ -146,17 +206,25 @@ async function loadSettings() {
 async function saveSettings(event) {
     event.preventDefault();
 
-    const geminiKey = document.getElementById('geminiKeyInput').value;
-    const deckName = document.getElementById('deckNameInput').value;
+    const get = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+    const getCheck = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
+
+    const typedKey = get('geminiKey');
+    const payload = {
+        // Only send the key if the user actually typed a new value
+        ...(typedKey ? { gemini_api_key: typedKey } : {}),
+        anki_deck_name: get('deckName'),
+        anki_model_name: get('modelName'),
+        hsk_target_level: parseInt(get('hskLevel')) || 3,
+        tone_colors_enabled: getCheck('toneColors'),
+        generate_audio: getCheck('generateAudio'),
+    };
 
     try {
         const response = await fetch('/api/settings', {
-            method: 'POST',
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                gemini_api_key: geminiKey,
-                anki_deck_name: deckName
-            })
+            body: JSON.stringify(payload)
         });
 
         if (response.ok) {
@@ -176,18 +244,16 @@ async function performSearch(query) {
     hideError();
     hideSuccess();
 
-    try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-        const data = await response.json();
+    searchAbortController = new AbortController();
 
-        if (data.results) {
-            displayResults(data.results, data.count || data.results.length);
-        } else {
-            // Handle empty/error
-            displayResults([], 0);
-        }
+    try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+            signal: searchAbortController.signal
+        });
+        const data = await response.json();
+        displayResults(data.results || [], (data.results || []).length);
     } catch (e) {
-        showError('Search failed: ' + e.message);
+        if (e.name !== 'AbortError') showError('Search failed: ' + e.message);
     } finally {
         document.getElementById('searchingIndicator').style.opacity = '0';
     }
@@ -244,25 +310,28 @@ function displayResults(results, count) {
     document.getElementById('resultsContainer').classList.remove('hidden');
 }
 
-async function selectWord(word) {
+function selectWord(word) {
     selectedWord = word;
 
-    // Update UI
     document.getElementById('selectedHanzi').textContent = word.simplified;
     document.getElementById('selectedPinyin').textContent = word.pinyin;
     document.getElementById('selectedDefinition').textContent = word.definitions.join('; ');
 
-    // Show word card
+    // Reset state — show generate button, hide progress + results
+    document.getElementById('generatePrompt').classList.remove('hidden');
+    document.getElementById('generationProgress').classList.add('hidden');
+    document.getElementById('generatedContent').classList.add('hidden');
+    generatedSentences = [];
+
     const wordCard = document.getElementById('wordCard');
     wordCard.classList.remove('hidden');
     wordCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 
-    // Show progress
+async function startGenerating() {
+    document.getElementById('generatePrompt').classList.add('hidden');
     document.getElementById('generationProgress').classList.remove('hidden');
-    document.getElementById('generatedContent').classList.add('hidden');
     document.getElementById('progressText').textContent = 'Generating 3 distinct sentences with Gemini...';
-
-    // Auto-generate sentences
     await generateSentencesForCard();
 }
 
@@ -286,16 +355,6 @@ async function generateSentencesForCard() {
 
         const data = await response.json();
 
-        // Check format based on new strict JSON requirement
-        // The backend now returns a list directly or an error list
-        let sentences = [];
-        if (Array.isArray(data)) {
-            // It might be the list directly from our new endpoint logic if we changed it?
-            // Wait, the API endpoint wrapper in `sentences.py` still wraps it in `GenerateSentencesResponse`
-            // Let's check `sentences.py` response model.
-        }
-
-        // Actually, let's look at `sentences.py`. It returns `GenerateSentencesResponse(success=True, sentences=...)`.
         if (data.success && data.sentences) {
             generatedSentences = data.sentences;
             renderSentenceOptions();
@@ -375,41 +434,40 @@ async function addToAnkiDirect(sentenceIndex) {
     document.getElementById('generationProgress').classList.remove('hidden');
     document.getElementById('progressText').textContent = 'Adding to Anki...';
 
+    const sentence = (generatedSentences && generatedSentences[sentenceIndex]) || {};
+
     try {
-        const response = await fetch('/api/add-to-anki', {
+        const response = await fetch('/api/sync/queue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 hanzi: selectedWord.simplified,
                 pinyin: selectedWord.pinyin,
                 definition: selectedWord.definitions[0],
+                sentence_hanzi: sentence.hanzi || null,
+                sentence_pinyin: sentence.pinyin || null,
+                sentence_english: sentence.english || null,
                 hsk_level: selectedWord.hsk_level || null,
-                part_of_speech: selectedWord.part_of_speech || null,
-                selected_sentence_index: sentenceIndex  // NEW: Pass selected index
+                part_of_speech: selectedWord.part_of_speech || null
             })
         });
 
         const data = await response.json();
 
-        if (data.success) {
-            showSuccess(data.message);
-            btn.textContent = '✓ Added to Anki';
+        if (data.queued) {
+            showSuccess('Card queued — will appear in Anki within 30s');
+            btn.textContent = '✓ Queued for Anki';
             btn.disabled = true;
         } else {
-            if (data.status === 'duplicate') {
-                showError(data.message);
-                btn.textContent = 'Already in Anki';
-            } else {
-                showError(data.message);
-                btn.disabled = false;
-                btn.textContent = 'Add to Anki';
-            }
+            showError(data.message || 'Failed to queue card');
+            btn.disabled = false;
+            btn.textContent = 'Add to Anki';
         }
 
         document.getElementById('generationProgress').classList.add('hidden');
 
     } catch (error) {
-        showError('Failed to add to Anki: ' + error.message);
+        showError('Failed to queue card: ' + error.message);
         btn.disabled = false;
         btn.textContent = 'Add to Anki';
         document.getElementById('generationProgress').classList.add('hidden');
@@ -454,6 +512,7 @@ function openSettingsModal() {
 
 function closeSettingsModal() {
     document.getElementById('settingsModal').classList.remove('active');
+    checkStatus();
 }
 
 // Test Gemini API Key

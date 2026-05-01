@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 from app.models.settings import AppSettings
 from app.services.anki import AnkiService, AnkiConnectError
-from app.services.gemini import GeminiService
 from app.services.audio import AudioService
+from app.services.service_cache import get_gemini
 from app.schemas.anki import AddToAnkiRequest, AddToAnkiResponse, AnkiStatusResponse
 from app.config import settings as app_settings
 import logging
@@ -83,7 +83,7 @@ async def add_to_anki(
     
     # Initialize services
     anki = AnkiService(app_settings.anki_connect_url)
-    gemini =  GeminiService(settings.gemini_api_key or app_settings.gemini_api_key)
+    gemini = get_gemini(settings.gemini_api_key or app_settings.gemini_api_key)
     audio = AudioService()
     
     try:
@@ -170,17 +170,19 @@ async def add_to_anki(
         other_sentences = [s for i, s in enumerate(sentences) if i != selected_idx]
 
         
-        # Step 5: Generate audio (if enabled)
+        # Step 5: Generate audio concurrently (if enabled)
         audio_fields = {}
         if settings.generate_audio:
+            import asyncio
             logger.info("Generating audio...")
-            word_audio = audio.generate_audio(request.hanzi)
-            sentence_audio = audio.generate_audio(selected_sentence['sentence_simplified'])
-
-            
-            if word_audio:
+            word_audio, sentence_audio = await asyncio.gather(
+                audio.generate_audio_async(request.hanzi),
+                audio.generate_audio_async(selected_sentence.get('sentence_simplified', '')),
+                return_exceptions=True
+            )
+            if isinstance(word_audio, bytes):
                 audio_fields['Audio'] = word_audio
-            if sentence_audio:
+            if isinstance(sentence_audio, bytes):
                 audio_fields['Sentence_Audio'] = sentence_audio
         
         # Step 6: Prepare fields

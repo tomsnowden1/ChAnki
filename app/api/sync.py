@@ -9,7 +9,7 @@ from app.db.session import get_db_session
 from app.models.card_queue import CardQueue
 from app.config import settings
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import os
 
@@ -24,12 +24,12 @@ class QueueCardRequest(BaseModel):
     hanzi: str
     pinyin: str
     definition: str
-    sentence_hanzi: str | None = None
-    sentence_pinyin: str | None = None
-    sentence_english: str | None = None
-    audio_url: str | None = None
-    hsk_level: int | None = None
-    part_of_speech: str | None = None
+    sentence_hanzi: Optional[str] = None
+    sentence_pinyin: Optional[str] = None
+    sentence_english: Optional[str] = None
+    audio_url: Optional[str] = None
+    hsk_level: Optional[int] = None
+    part_of_speech: Optional[str] = None
 
 
 class AcknowledgeRequest(BaseModel):

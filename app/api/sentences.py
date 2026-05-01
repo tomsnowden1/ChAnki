@@ -1,12 +1,13 @@
 """
-API endpoint to generate 3 sentences for preview (before adding to Anki)
+API endpoint to generate 3 sentences for preview (before adding to Anki).
+
+Tatoeba is the primary source; Gemini is the fallback when Tatoeba lacks
+enough hits for the queried word.
 """
-import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db.session import get_db_session
-from app.models.settings import AppSettings
-from app.services.gemini import GeminiService
+from app.services.service_cache import get_gemini, get_settings, get_sentence_service
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 
@@ -31,34 +32,38 @@ async def generate_sentences(
     request: GenerateSentencesRequest,
     db: Session = Depends(get_db_session)
 ):
-    """Generate 3 example sentences for preview"""
+    """Generate 3 example sentences. Tries Tatoeba first, then Gemini."""
     try:
-        # Get settings for API key
-        settings = db.query(AppSettings).first()
-        if not settings or not settings.gemini_api_key:
-            return GenerateSentencesResponse(
-                success=False,
-                sentences=[],
-                message="Gemini API key not configured"
-            )
-        
-        # Generate sentences
-        gemini = GeminiService(settings.gemini_api_key)
-        sentences = gemini.generate_sentences(
+        settings = get_settings(db)
+        gemini = None
+        if settings and settings.gemini_api_key:
+            gemini = get_gemini(settings.gemini_api_key)
+
+        service = get_sentence_service(db, gemini)
+        sentences = service.find_sentences(
             request.hanzi,
             request.pinyin,
             request.definition,
-            request.hsk_level
+            request.hsk_level or 3,
         )
-        
-        return GenerateSentencesResponse(
-            success=True,
-            sentences=sentences
-        )
-        
+
+        if not sentences:
+            return GenerateSentencesResponse(
+                success=False,
+                sentences=[],
+                message=(
+                    "No Tatoeba match and no Gemini key configured. "
+                    "Add a Gemini key in Settings to enable AI fallback."
+                    if gemini is None
+                    else "No sentences found."
+                ),
+            )
+
+        return GenerateSentencesResponse(success=True, sentences=sentences)
+
     except Exception as e:
         return GenerateSentencesResponse(
             success=False,
             sentences=[],
-            message=f"Error: {str(e)}"
+            message=f"Error: {str(e)}",
         )

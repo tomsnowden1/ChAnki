@@ -116,23 +116,29 @@ Do not include any explanation, just the JSON."""
         logger.info(f"Using fallback sentence for {hanzi}")
         return templates[0]
     
-    def generate_sentences(self, word: str, hsk_level: int = 3) -> list:
+    def generate_sentences(self, hanzi: str, pinyin: str = '', definition: str = '', hsk_level: int = 3) -> list:
         """
         Generate 3 distinct, natural Chinese sentences using the word.
-        
-        Args:
-            word: The target Chinese word (hanzi)
-            hsk_level: Target HSK level (default 3)
-            
+
         Returns:
             List of dicts with keys: 'hanzi', 'pinyin', 'english'
         """
         if not self.model:
-            # v2.0 Requirement: No random text fallback. Clear error.
             logger.warning("Gemini model not initialized")
             return [{"error": "Connect Gemini to generate sentences."}]
-        
-        prompt = f"""Generate 3 distinct, natural Chinese sentences using the word {word} at HSK Level {hsk_level}. Return strictly valid JSON: [{{'hanzi': '...', 'pinyin': '...', 'english': '...'}}]."""
+
+        hsk_level = hsk_level or 3
+        context = f" ({pinyin}, meaning: {definition})" if definition else ""
+        prompt = f"""Generate 3 distinct, natural Chinese sentences using the word {hanzi}{context} at HSK Level {hsk_level}.
+
+Requirements:
+- Use simplified Chinese characters
+- Each sentence must naturally demonstrate the word's meaning
+- Vary sentence structure and context across the 3 examples
+- HSK {hsk_level} vocabulary difficulty
+
+Return ONLY a JSON array, no explanation:
+[{{"hanzi": "Chinese sentence", "pinyin": "pinyin with tones", "english": "English translation"}}]"""
 
         try:
             response = self.model.generate_content(prompt)
