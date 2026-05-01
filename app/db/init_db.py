@@ -24,34 +24,49 @@ def _pinyin_plain(pinyin: str) -> str:
 def run_schema_migrations():
     """
     Idempotent ALTER TABLE migrations for columns added after initial deploy.
-    Safe to call on every startup — each statement is wrapped in try/except.
-    """
-    migrations = [
-        # AppSettings: strict_mode column (Phase: card-types feature)
-        ("settings", "strict_mode", "BOOLEAN DEFAULT FALSE"),
-        # CardQueue: card_type and hint columns
-        ("card_queue", "card_type", "VARCHAR"),
-        ("card_queue", "hint", "VARCHAR"),
-    ]
 
+    DDL is executed in AUTOCOMMIT mode so each statement is its own transaction
+    and can never leave the session in an aborted-transaction state.
+    Safe to call on every startup — duplicate-column errors are silently ignored.
+    """
+    if _is_sqlite():
+        _run_migrations_sqlite()
+    else:
+        _run_migrations_postgres()
+
+
+def _run_migrations_sqlite():
+    """SQLite: no IF NOT EXISTS for ADD COLUMN; catch duplicate-column errors."""
+    stmts = [
+        "ALTER TABLE settings ADD COLUMN strict_mode BOOLEAN DEFAULT 0",
+        "ALTER TABLE card_queue ADD COLUMN card_type TEXT",
+        "ALTER TABLE card_queue ADD COLUMN hint TEXT",
+    ]
     with get_db() as db:
-        for table, column, col_def in migrations:
-            if _is_sqlite():
-                # SQLite: no IF NOT EXISTS; silently ignore duplicate column error
+        for stmt in stmts:
+            try:
+                db.execute(text(stmt))
+                db.commit()
+            except Exception:
+                db.rollback()  # column already exists → ignore
+
+
+def _run_migrations_postgres():
+    """Postgres: use AUTOCOMMIT so DDL never gets rolled back by session state."""
+    stmts = [
+        "ALTER TABLE settings   ADD COLUMN IF NOT EXISTS strict_mode BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE card_queue ADD COLUMN IF NOT EXISTS card_type   VARCHAR",
+        "ALTER TABLE card_queue ADD COLUMN IF NOT EXISTS hint        VARCHAR",
+    ]
+    try:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            for stmt in stmts:
                 try:
-                    db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
-                    db.commit()
-                except Exception:
-                    db.rollback()
-            else:
-                # Postgres supports IF NOT EXISTS (avoids noisy errors)
-                try:
-                    db.execute(text(
-                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_def}"
-                    ))
-                    db.commit()
-                except Exception:
-                    db.rollback()
+                    conn.execute(text(stmt))
+                except Exception as e:
+                    logger.warning(f"Migration skipped ({stmt[:40]}…): {e}")
+    except Exception as e:
+        logger.error(f"Schema migration connection failed: {e}")
 
 
 def initialize_database():

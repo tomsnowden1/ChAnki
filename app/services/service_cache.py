@@ -40,13 +40,29 @@ _SETTINGS_TTL = 30.0  # seconds
 
 
 def get_settings(db):
-    """Return cached AppSettings, refreshing after TTL expires."""
+    """Return cached AppSettings, refreshing after TTL expires.
+
+    Returns None (never raises) so callers that do
+    ``(settings.x if settings else default)`` are safe even when a schema
+    migration hasn't completed yet.
+    """
     global _settings, _settings_ts
     with _lock:
         if _settings is None or (time.monotonic() - _settings_ts) > _SETTINGS_TTL:
             from app.models.settings import AppSettings
-            _settings = db.query(AppSettings).first()
-            _settings_ts = time.monotonic()
+            try:
+                _settings = db.query(AppSettings).first()
+                _settings_ts = time.monotonic()
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"get_settings query failed (schema migration pending?): {e}"
+                )
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                return None
         return _settings
 
 
