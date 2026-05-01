@@ -165,16 +165,23 @@ class DictionaryService:
         ).limit(limit).all()
 
     @staticmethod
-    def _commonality_order():
+    def _commonality_order(query: str = ""):
         """
-        Sort expression: HSK level ascending (1=most common, null=rare),
-        then simplified length ascending (short words are simpler/more common).
-        Produces: 狗 before 一人得道，鸡犬升天 even with no HSK data.
+        Three-tier sort for relevance + commonality:
+          1. Primary-meaning match: first definition starts with the query
+             word → definitions ILIKE '["<query>%'  (狗 beats 猈)
+          2. HSK level ascending (1=most common, null→99)
+          3. Simplified char length ascending (short beats long idioms)
         """
-        return (
-            case((DictionaryEntry.hsk_level.isnot(None), DictionaryEntry.hsk_level), else_=99),
-            func.length(DictionaryEntry.simplified),
+        primary = case(
+            (DictionaryEntry.definitions.ilike(f'["{query.lower()}%'), 0),
+            else_=1
+        ) if query else 1
+        hsk = case(
+            (DictionaryEntry.hsk_level.isnot(None), DictionaryEntry.hsk_level),
+            else_=99
         )
+        return (primary, hsk, func.length(DictionaryEntry.simplified))
 
     def _search_pinyin_like(self, plain: str, limit: int) -> List[DictionaryEntry]:
         return self.db.query(DictionaryEntry).filter(
@@ -190,7 +197,7 @@ class DictionaryService:
         if not _USE_FTS:
             return self.db.query(DictionaryEntry).filter(
                 DictionaryEntry.definitions.ilike(f'%{query.lower()}%')
-            ).order_by(*self._commonality_order()).limit(limit).all()
+            ).order_by(*self._commonality_order(query)).limit(limit).all()
 
         try:
             # Escape FTS5 special chars
