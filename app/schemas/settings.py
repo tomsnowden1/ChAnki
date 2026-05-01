@@ -11,6 +11,7 @@ class SettingsUpdate(BaseModel):
     hsk_target_level: Optional[int] = Field(None, ge=1, le=6)
     tone_colors_enabled: Optional[bool] = None
     generate_audio: Optional[bool] = None
+    strict_mode: Optional[bool] = None
 
 
 class SettingsResponse(BaseModel):
@@ -21,4 +22,5 @@ class SettingsResponse(BaseModel):
     hsk_target_level: int
     tone_colors_enabled: bool
     generate_audio: bool
+    strict_mode: bool = False
     updated_at: Optional[str] = None

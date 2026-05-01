@@ -120,8 +120,11 @@ Do not include any explanation, just the JSON."""
         """
         Generate 3 distinct, natural Chinese sentences using the word.
 
+        Each sentence includes a 'hint' field — a short EN→ZH production aid
+        (mnemonic, collocations, usage note, or memory trick).
+
         Returns:
-            List of dicts with keys: 'hanzi', 'pinyin', 'english'
+            List of dicts with keys: 'hanzi', 'pinyin', 'english', 'hint'
         """
         if not self.model:
             logger.warning("Gemini model not initialized")
@@ -136,34 +139,37 @@ Requirements:
 - Each sentence must naturally demonstrate the word's meaning
 - Vary sentence structure and context across the 3 examples
 - HSK {hsk_level} vocabulary difficulty
+- Include a short EN→ZH production hint per sentence (1-2 sentences: useful collocations, a memory trick, or a usage note that helps a learner recall {hanzi})
 
 Return ONLY a JSON array, no explanation:
-[{{"hanzi": "Chinese sentence", "pinyin": "pinyin with tones", "english": "English translation"}}]"""
+[{{"hanzi": "Chinese sentence", "pinyin": "pinyin with tone marks", "english": "English translation", "hint": "Short EN→ZH production hint"}}]"""
 
         try:
             response = self.model.generate_content(prompt)
             text = response.text.strip()
-            
-            # clean potential markdown code blocks
+
+            # Clean potential markdown code blocks
             if '```json' in text:
                 text = text.split('```json')[1].split('```')[0].strip()
             elif '```' in text:
                 text = text.split('```')[1].split('```')[0].strip()
-                
+
             # Parse JSON
             sentences = json.loads(text)
-            
-            # Validate format
+
+            # Validate format — require hanzi/pinyin/english; hint is optional
             valid_sentences = []
             if isinstance(sentences, list):
                 for s in sentences:
                     if all(k in s for k in ['hanzi', 'pinyin', 'english']):
+                        # Ensure hint key exists (may be absent if model skips it)
+                        s.setdefault('hint', '')
                         valid_sentences.append(s)
-            
+
             if not valid_sentences:
                 logger.warning("Gemini returned invalid JSON structure")
                 return [{"error": "Failed to generate valid sentences."}]
-                
+
             return valid_sentences
 
         except Exception as e:

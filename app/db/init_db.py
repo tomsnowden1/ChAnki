@@ -21,11 +21,47 @@ def _pinyin_plain(pinyin: str) -> str:
     return _TONE_STRIP.sub('', pinyin.lower())
 
 
+def run_schema_migrations():
+    """
+    Idempotent ALTER TABLE migrations for columns added after initial deploy.
+    Safe to call on every startup — each statement is wrapped in try/except.
+    """
+    migrations = [
+        # AppSettings: strict_mode column (Phase: card-types feature)
+        ("settings", "strict_mode", "BOOLEAN DEFAULT FALSE"),
+        # CardQueue: card_type and hint columns
+        ("card_queue", "card_type", "VARCHAR"),
+        ("card_queue", "hint", "VARCHAR"),
+    ]
+
+    with get_db() as db:
+        for table, column, col_def in migrations:
+            if _is_sqlite():
+                # SQLite: no IF NOT EXISTS; silently ignore duplicate column error
+                try:
+                    db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
+                    db.commit()
+                except Exception:
+                    db.rollback()
+            else:
+                # Postgres supports IF NOT EXISTS (avoids noisy errors)
+                try:
+                    db.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_def}"
+                    ))
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
+
 def initialize_database():
     """Create all database tables"""
     print("Initializing database...")
     init_db()
     print("✓ Database tables created")
+
+    run_schema_migrations()
+    print("✓ Schema migrations applied")
 
     with get_db() as db:
         settings = db.query(AppSettings).first()

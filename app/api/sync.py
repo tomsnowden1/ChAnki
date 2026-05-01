@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 from app.models.card_queue import CardQueue
+from app.services.service_cache import get_settings as _get_settings
 from app.config import settings
 from pydantic import BaseModel
 from typing import List, Optional
@@ -28,6 +29,7 @@ class QueueCardRequest(BaseModel):
     sentence_pinyin: Optional[str] = None
     sentence_english: Optional[str] = None
     audio_url: Optional[str] = None
+    hint: Optional[str] = None
     hsk_level: Optional[int] = None
     part_of_speech: Optional[str] = None
 
@@ -47,34 +49,53 @@ def verify_sync_secret(x_sync_secret: str = Header(None)):
 @router.post("/queue")
 def queue_card(request: QueueCardRequest, db: Session = Depends(get_db_session)):
     """
-    Queue a card for later synchronization to local Anki
-    This replaces direct AnkiConnect calls when deployed to cloud
+    Queue 2 or 4 Anki cards for later sync to local Anki.
+
+    Normal mode (4 cards): EN→ZH, ZH→EN, EN Sentence→ZH Sentence, ZH Sentence (cloze).
+    Strict mode (2 cards): ZH→EN + ZH Sentence (cloze) only.
+
+    Sentence card types are skipped if no sentence_hanzi is provided.
     """
-    card = CardQueue(
-        hanzi=request.hanzi,
-        pinyin=request.pinyin,
-        definition=request.definition,
-        sentence_hanzi=request.sentence_hanzi,
-        sentence_pinyin=request.sentence_pinyin,
-        sentence_english=request.sentence_english,
-        audio_url=request.audio_url,
-        hsk_level=request.hsk_level,
-        part_of_speech=request.part_of_speech,
-        status="pending"
-    )
-    
-    db.add(card)
+    db_settings = _get_settings(db)
+    strict_mode = bool(db_settings.strict_mode) if db_settings else False
+
+    if strict_mode:
+        card_types = ["zh_to_en", "zh_sentence"]
+    else:
+        card_types = ["en_to_zh", "zh_to_en", "en_sentence", "zh_sentence"]
+
+    # Drop sentence-type cards when no sentence data is available
+    has_sentence = bool(request.sentence_hanzi)
+    if not has_sentence:
+        card_types = [ct for ct in card_types if "sentence" not in ct]
+
+    for card_type in card_types:
+        card = CardQueue(
+            hanzi=request.hanzi,
+            pinyin=request.pinyin,
+            definition=request.definition,
+            sentence_hanzi=request.sentence_hanzi,
+            sentence_pinyin=request.sentence_pinyin,
+            sentence_english=request.sentence_english,
+            audio_url=request.audio_url,
+            hint=request.hint,
+            card_type=card_type,
+            hsk_level=request.hsk_level,
+            part_of_speech=request.part_of_speech,
+            status="pending",
+        )
+        db.add(card)
+
     db.commit()
-    db.refresh(card)
-    
-    # Count total pending cards
+
     pending_count = db.query(CardQueue).filter(CardQueue.status == "pending").count()
-    
+    cards_created = len(card_types)
+
     return {
         "queued": True,
-        "card_id": card.id,
+        "cards_created": cards_created,
         "queue_position": pending_count,
-        "message": f"Card queued for sync ({pending_count} pending)"
+        "message": f"{cards_created} card(s) queued for sync",
     }
 
 

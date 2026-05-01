@@ -22,7 +22,13 @@ class CardQueue(Base):
     
     # Optional audio URL (TTS generated)
     audio_url = Column(String, nullable=True)
-    
+
+    # Card type: en_to_zh | zh_to_en | en_sentence | zh_sentence | None (legacy cloze)
+    card_type = Column(String, nullable=True)
+
+    # Hint shown on EN→ZH production cards to aid recall
+    hint = Column(String, nullable=True)
+
     # HSK level and part of speech
     hsk_level = Column(Integer, nullable=True)
     part_of_speech = Column(String, nullable=True)
@@ -49,6 +55,8 @@ class CardQueue(Base):
             "sentence_pinyin": self.sentence_pinyin,
             "sentence_english": self.sentence_english,
             "audio_url": self.audio_url,
+            "card_type": self.card_type,
+            "hint": self.hint,
             "hsk_level": self.hsk_level,
             "part_of_speech": self.part_of_speech,
             "status": self.status,

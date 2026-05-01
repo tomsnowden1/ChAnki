@@ -263,6 +263,7 @@ async function loadSettings() {
         set('hskLevel', settings.hsk_target_level);
         check('toneColors', settings.tone_colors_enabled);
         check('generateAudio', settings.generate_audio);
+        check('strictMode', settings.strict_mode);
 
     } catch (e) {
         console.error('Failed to load settings:', e);
@@ -285,6 +286,7 @@ async function saveSettings(event) {
         hsk_target_level: parseInt(get('hskLevel')) || 3,
         tone_colors_enabled: getCheck('toneColors'),
         generate_audio: getCheck('generateAudio'),
+        strict_mode: getCheck('strictMode'),
     };
 
     try {
@@ -383,6 +385,17 @@ function selectWord(word) {
     document.getElementById('selectedPinyin').textContent = word.pinyin;
     document.getElementById('selectedDefinition').textContent = word.definitions.join('; ');
 
+    // Show TTS button for the word (only if SpeechSynthesis is available)
+    const ttsBtn = document.getElementById('ttsWordBtn');
+    if (ttsBtn) {
+        if (window.speechSynthesis) {
+            ttsBtn.classList.remove('hidden');
+            ttsBtn.onclick = () => speakChinese(word.simplified);
+        } else {
+            ttsBtn.classList.add('hidden');
+        }
+    }
+
     // Reset state — show generate button, hide progress + results
     document.getElementById('generatePrompt').classList.remove('hidden');
     document.getElementById('generationProgress').classList.add('hidden');
@@ -453,26 +466,45 @@ function renderSentenceOptions() {
         const isSelected = index === 0;
         if (isSelected) selectedSentenceIndex = 0;
 
+        const hanziText = sentence.hanzi || sentence.sentence_simplified || '';
+        const pinyinText = sentence.pinyin || '';
+        const englishText = sentence.english || sentence.sentence_english || '';
+        const hintText = sentence.hint || '';
+
         div.className = `p-4 border-2 rounded-xl cursor-pointer transition-all ${isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`;
         div.innerHTML = `
             <div class="flex items-start gap-3">
-                <input type="radio" name="sentenceChoice" value="${index}" 
+                <input type="radio" name="sentenceChoice" value="${index}"
                     ${isSelected ? 'checked' : ''}
-                    class="mt-1 w-5 h-5 text-purple-600 cursor-pointer">
-                <div class="flex-1">
-                    <p class="text-xl hanzi-text font-semibold text-gray-800 mb-1">${sentence.hanzi || sentence.sentence_simplified}</p>
-                    <p class="text-sm text-gray-600">${sentence.english || sentence.sentence_english}</p>
+                    class="mt-1 w-5 h-5 text-purple-600 cursor-pointer flex-shrink-0">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <p class="text-xl hanzi-text font-semibold text-gray-800">${hanziText}</p>
+                        ${window.speechSynthesis ? `<button class="tts-sentence-btn text-lg text-gray-400 hover:text-purple-600 transition-colors flex-shrink-0" title="Listen">🔊</button>` : ''}
+                    </div>
+                    ${pinyinText ? `<p class="text-xs text-purple-500 mt-0.5">${pinyinText}</p>` : ''}
+                    <p class="text-sm text-gray-600 mt-1">${englishText}</p>
+                    ${hintText ? `<p class="text-xs text-gray-400 italic mt-1.5">💡 ${hintText}</p>` : ''}
                 </div>
             </div>
         `;
 
+        // TTS button — stop propagation so it doesn't also select the sentence
+        const ttsBtn = div.querySelector('.tts-sentence-btn');
+        if (ttsBtn) {
+            ttsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                speakChinese(hanziText);
+            });
+        }
+
         div.onclick = (e) => {
-            if (e.target.type !== 'radio') {
-                div.querySelector('input').checked = true;
-            }
+            if (e.target.type === 'radio' || e.target.classList.contains('tts-sentence-btn')) return;
+            div.querySelector('input[type="radio"]').checked = true;
             // Update styles
             Array.from(list.children).forEach(c => {
-                c.className = c.className.replace('border-purple-500 bg-purple-50', 'border-gray-200');
+                c.className = c.className
+                    .replace('border-purple-500 bg-purple-50', 'border-gray-200');
             });
             div.className = div.className.replace('border-gray-200', 'border-purple-500 bg-purple-50');
             selectedSentenceIndex = index;
@@ -485,22 +517,19 @@ function closeSentenceModal() { /* Deprecated */ }
 function startSentenceSelection() { /* Deprecated in v2 */ }
 
 async function confirmAndAddToAnki() {
-    // Add to Anki with selected sentence
-    await addToAnkiDirect(selectedSentenceIndex);
+    const sentence = (generatedSentences && generatedSentences[selectedSentenceIndex]) || {};
+    await addToAnkiDirect(sentence);
 }
 
-async function addToAnkiDirect(sentenceIndex) {
-
+async function addToAnkiDirect(sentence) {
     const btn = document.getElementById('addToAnkiBtn');
     btn.disabled = true;
     btn.textContent = 'Adding...';
 
-    // Show progress again
+    // Show progress
     document.getElementById('generatedContent').classList.add('hidden');
     document.getElementById('generationProgress').classList.remove('hidden');
-    document.getElementById('progressText').textContent = 'Adding to Anki...';
-
-    const sentence = (generatedSentences && generatedSentences[sentenceIndex]) || {};
+    document.getElementById('progressText').textContent = 'Queuing cards for Anki...';
 
     try {
         const response = await fetch('/api/sync/queue', {
@@ -513,16 +542,18 @@ async function addToAnkiDirect(sentenceIndex) {
                 sentence_hanzi: sentence.hanzi || null,
                 sentence_pinyin: sentence.pinyin || null,
                 sentence_english: sentence.english || null,
+                hint: sentence.hint || null,
                 hsk_level: selectedWord.hsk_level || null,
-                part_of_speech: selectedWord.part_of_speech || null
+                part_of_speech: selectedWord.part_of_speech || null,
             })
         });
 
         const data = await response.json();
 
         if (data.queued) {
-            showSuccess('Card queued — will appear in Anki within 30s');
-            btn.textContent = '✓ Queued for Anki';
+            const n = data.cards_created || 1;
+            showSuccess(`${n} card${n !== 1 ? 's' : ''} queued — will appear in Anki within 30s`);
+            btn.textContent = `✓ ${n} Card${n !== 1 ? 's' : ''} Queued`;
             btn.disabled = true;
         } else {
             showError(data.message || 'Failed to queue card');
@@ -579,6 +610,20 @@ function openSettingsModal() {
 function closeSettingsModal() {
     document.getElementById('settingsModal').classList.remove('active');
     checkStatus();
+}
+
+// ---------------------------------------------------------------------------
+// Text-to-Speech via browser SpeechSynthesis API
+// ---------------------------------------------------------------------------
+function speakChinese(text) {
+    if (!text || !window.speechSynthesis) return;
+    // Cancel any ongoing utterance first
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 0.9;    // slightly slower for clarity
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
 }
 
 // Test Gemini API Key

@@ -17,6 +17,7 @@ class AppSettings(Base):
     hsk_target_level = Column(Integer, default=3)
     tone_colors_enabled = Column(Boolean, default=True)
     generate_audio = Column(Boolean, default=True)
+    strict_mode = Column(Boolean, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Sentinel returned to the frontend so it knows a key is set without seeing it
@@ -30,5 +31,6 @@ class AppSettings(Base):
             "hsk_target_level": self.hsk_target_level,
             "tone_colors_enabled": self.tone_colors_enabled,
             "generate_audio": self.generate_audio,
+            "strict_mode": self.strict_mode,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
