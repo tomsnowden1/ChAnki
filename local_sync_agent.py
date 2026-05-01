@@ -108,8 +108,20 @@ class SyncAgent:
             log(f"⚠️  Error fetching cards: {e}", Colors.YELLOW)
             return []
     
+    def ensure_deck_exists(self):
+        """Create the deck if it doesn't exist yet (AnkiConnect createDeck is idempotent)."""
+        try:
+            requests.post(
+                self.anki_url,
+                json={"action": "createDeck", "version": 6, "params": {"deck": self.deck_name}},
+                timeout=5
+            )
+        except Exception:
+            pass  # Best-effort; addNote will surface any real error
+
     def add_card_to_anki(self, card: dict) -> bool:
         """Add a single card to Anki via AnkiConnect"""
+        self.ensure_deck_exists()
         try:
             # Format sentence with cloze deletion
             sentence = card.get("sentence_hanzi", "")
