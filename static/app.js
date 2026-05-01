@@ -119,24 +119,38 @@ function setupEventListeners() {
 
 // Check health status and update UI indicators
 async function checkStatus() {
+    // Server health (dictionary, gemini)
     try {
         const response = await fetch('/api/health');
         const data = await response.json();
-
-        const ankiOk = data.components.anki?.status === 'healthy';
         const geminiOk = data.components.gemini?.status === 'healthy';
         updateStatusDot('dictStatus', data.components.database?.status === 'healthy');
         updateStatusDot('geminiStatus', geminiOk);
-        updateStatusDot('ankiStatus', ankiOk);
-        updateAnkiPanels(ankiOk);
         updateGeminiSettingsPanel(geminiOk);
-
-    } catch (error) {
-        console.error('Health check failed:', error);
+    } catch {
         updateStatusDot('dictStatus', false);
         updateStatusDot('geminiStatus', false);
-        updateStatusDot('ankiStatus', false);
-        updateAnkiPanels(false);
+    }
+
+    // Anki: check localhost:8765 directly from the browser
+    // (server can't reach the user's local AnkiConnect)
+    const ankiOk = await checkAnkiLocal();
+    updateStatusDot('ankiStatus', ankiOk);
+    updateAnkiPanels(ankiOk);
+}
+
+async function checkAnkiLocal() {
+    try {
+        const res = await fetch('http://localhost:8765', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'version', version: 6 }),
+            signal: AbortSignal.timeout(2000),
+        });
+        const data = await res.json();
+        return (data.result ?? 0) >= 6;
+    } catch {
+        return false;
     }
 }
 
