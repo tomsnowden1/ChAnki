@@ -402,6 +402,13 @@ function selectWord(word) {
     document.getElementById('generatedContent').classList.add('hidden');
     generatedSentences = [];
 
+    // Reset Add to Anki button so a new word can be queued
+    const addBtn = document.getElementById('addToAnkiBtn');
+    if (addBtn) {
+        addBtn.disabled = false;
+        addBtn.textContent = 'Add to Anki';
+    }
+
     const wordCard = document.getElementById('wordCard');
     wordCard.classList.remove('hidden');
     wordCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -615,7 +622,30 @@ function closeSettingsModal() {
 // ---------------------------------------------------------------------------
 // Text-to-Speech via browser SpeechSynthesis API
 // ---------------------------------------------------------------------------
-function speakChinese(text) {
+
+/** Resolve to the best zh-CN voice, waiting for voices to load if needed. */
+function _getChineseVoice() {
+    return new Promise((resolve) => {
+        const pick = () => {
+            const voices = window.speechSynthesis.getVoices();
+            // Prefer an exact zh-CN match, then any zh-* voice
+            const voice =
+                voices.find((v) => v.lang === 'zh-CN') ||
+                voices.find((v) => v.lang.startsWith('zh')) ||
+                null;
+            resolve(voice);
+        };
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length) {
+            pick();
+        } else {
+            // Voices aren't loaded yet — wait for the event (fires once on most browsers)
+            window.speechSynthesis.addEventListener('voiceschanged', pick, { once: true });
+        }
+    });
+}
+
+async function speakChinese(text) {
     if (!text || !window.speechSynthesis) return;
     // Cancel any ongoing utterance first
     window.speechSynthesis.cancel();
@@ -623,6 +653,8 @@ function speakChinese(text) {
     utterance.lang = 'zh-CN';
     utterance.rate = 0.9;    // slightly slower for clarity
     utterance.pitch = 1.0;
+    const voice = await _getChineseVoice();
+    if (voice) utterance.voice = voice;
     window.speechSynthesis.speak(utterance);
 }
 

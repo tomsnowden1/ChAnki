@@ -1,5 +1,5 @@
 """Card Queue Model for Cloud-Sync Architecture"""
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Index
 from sqlalchemy.sql import func
 from app.models.settings import Base
 
@@ -41,6 +41,11 @@ class CardQueue(Base):
     # Error tracking
     error_message = Column(String, nullable=True)
     
+    __table_args__ = (
+        # Speeds up the polling query: WHERE status='pending' ORDER BY created_at
+        Index('ix_card_queue_status_created', 'status', 'created_at'),
+    )
+
     def __repr__(self):
         return f"<CardQueue(id={self.id}, hanzi={self.hanzi}, status={self.status})>"
     

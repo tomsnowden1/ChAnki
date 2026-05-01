@@ -235,7 +235,7 @@ class SyncAgent:
     # Note building — one method per card type
     # ------------------------------------------------------------------
 
-    def _build_note(self, card: dict) -> dict | None:
+    def _build_note(self, card: dict):  # -> dict | None  (| syntax needs Python 3.10+)
         """
         Build an AnkiConnect note payload from a card dict.
         Returns None if the card should be silently skipped

@@ -167,21 +167,30 @@ class DictionaryService:
     @staticmethod
     def _commonality_order(query: str = ""):
         """
-        Three-tier sort for relevance + commonality:
+        Two- or three-tier sort for relevance + commonality.
+
+        With a query (three tiers):
           1. Primary-meaning match: first definition starts with the query
              word → definitions ILIKE '["<query>%'  (狗 beats 猈)
           2. HSK level ascending (1=most common, null→99)
           3. Simplified char length ascending (short beats long idioms)
+
+        Without a query (two tiers — no int literals that break SQLAlchemy):
+          1. HSK level ascending (null→99)
+          2. Simplified char length ascending
         """
-        primary = case(
-            (DictionaryEntry.definitions.ilike(f'["{query.lower()}%'), 0),
-            else_=1
-        ) if query else 1
         hsk = case(
             (DictionaryEntry.hsk_level.isnot(None), DictionaryEntry.hsk_level),
             else_=99
         )
-        return (primary, hsk, func.length(DictionaryEntry.simplified))
+        length = func.length(DictionaryEntry.simplified)
+        if not query:
+            return (hsk, length)
+        primary = case(
+            (DictionaryEntry.definitions.ilike(f'["{query.lower()}%'), 0),
+            else_=1
+        )
+        return (primary, hsk, length)
 
     def _search_pinyin_like(self, plain: str, limit: int) -> List[DictionaryEntry]:
         return self.db.query(DictionaryEntry).filter(

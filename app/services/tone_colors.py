@@ -40,8 +40,8 @@ def _is_cjk(ch: str) -> bool:
 
 
 def _split_syllables(pinyin: str) -> list[str]:
-    """Split a pinyin string into individual syllables."""
-    return [s for s in re.split(r"[\s,.\[\]()/]+", pinyin.strip()) if s]
+    """Split a pinyin string into individual syllables. Accepts None gracefully."""
+    return [s for s in re.split(r"[\s,.\[\]()/]+", (pinyin or "").strip()) if s]
 
 
 def _tone_of(syllable: str) -> int:

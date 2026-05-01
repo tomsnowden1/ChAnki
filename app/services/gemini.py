@@ -14,8 +14,8 @@ class GeminiService:
         self.api_key = api_key
         if api_key:
             genai.configure(api_key=api_key)
-            # Use Gemini Flash Latest (free tier - auto-updates to latest flash model)
-            self.model = genai.GenerativeModel('gemini-flash-latest')
+            # Pin to a specific stable model version (avoid surprise breaking changes)
+            self.model = genai.GenerativeModel('gemini-2.0-flash')
         else:
             self.model = None
             logger.warning("No Gemini API key provided")

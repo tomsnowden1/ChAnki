@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import os
+import secrets as _secrets
 
 router = APIRouter()
 
@@ -40,8 +41,8 @@ class AcknowledgeRequest(BaseModel):
 
 
 def verify_sync_secret(x_sync_secret: str = Header(None)):
-    """Verify sync secret authentication"""
-    if x_sync_secret != SYNC_SECRET:
+    """Verify sync secret authentication (timing-safe comparison)"""
+    if not _secrets.compare_digest(x_sync_secret or "", SYNC_SECRET):
         raise HTTPException(status_code=401, detail="Invalid sync secret")
     return True
 

@@ -44,8 +44,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(API_CACHE).then((c) => c.put(req, copy));
+          // Only cache successful responses — never store 4xx/5xx in the cache
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(API_CACHE).then((c) => c.put(req, copy));
+          }
           return res;
         })
         .catch(() => caches.match(req))

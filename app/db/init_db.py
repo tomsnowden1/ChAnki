@@ -57,6 +57,8 @@ def _run_migrations_postgres():
         "ALTER TABLE settings   ADD COLUMN IF NOT EXISTS strict_mode BOOLEAN DEFAULT FALSE",
         "ALTER TABLE card_queue ADD COLUMN IF NOT EXISTS card_type   VARCHAR",
         "ALTER TABLE card_queue ADD COLUMN IF NOT EXISTS hint        VARCHAR",
+        # Composite index for the polling query (WHERE status='pending' ORDER BY created_at)
+        "CREATE INDEX IF NOT EXISTS ix_card_queue_status_created ON card_queue (status, created_at)",
     ]
     try:
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:

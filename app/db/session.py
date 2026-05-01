@@ -14,10 +14,13 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Create engine with appropriate settings
+_is_postgres = "sqlite" not in DATABASE_URL
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
-    pool_pre_ping=True  # Verify connections before using them
+    connect_args={"check_same_thread": False} if not _is_postgres else {},
+    pool_pre_ping=True,   # Verify connections before using them
+    # Recycle connections before Supabase's 10-min idle timeout kills them
+    **({"pool_recycle": 300, "pool_size": 5} if _is_postgres else {}),
 )
 
 # Create session factory
