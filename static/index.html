@@ -94,9 +94,23 @@
                 <div id="geminiStatus" class="w-3 h-3 rounded-full bg-gray-400"></div>
                 <span class="text-gray-700">Gemini AI</span>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="relative flex items-center gap-2 cursor-pointer group" id="ankiStatusWrapper">
                 <div id="ankiStatus" class="w-3 h-3 rounded-full bg-gray-400"></div>
                 <span class="text-gray-700">Anki</span>
+                <!-- Tooltip -->
+                <div id="ankiTooltip" class="hidden absolute top-7 left-1/2 -translate-x-1/2 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-left">
+                    <p id="ankiTooltipStatus" class="font-semibold text-sm mb-2 text-gray-500">Anki not detected</p>
+                    <p class="text-xs text-gray-600 mb-3">Cards are queued to the cloud and delivered automatically when Anki Desktop is open on your Mac.</p>
+                    <div class="bg-gray-50 rounded-lg p-3 text-xs">
+                        <p class="font-semibold text-gray-700 mb-1">One-time setup:</p>
+                        <ol class="list-decimal list-inside space-y-1 text-gray-600">
+                            <li>Open <strong>Anki Desktop</strong></li>
+                            <li>Tools → Add-ons → Get Add-ons</li>
+                            <li>Enter code: <code class="bg-white border px-1 rounded font-mono">2055492159</code></li>
+                            <li>Restart Anki</li>
+                        </ol>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -192,6 +206,27 @@
             </div>
 
             <form id="settingsForm" class="space-y-6">
+
+                <!-- Anki Connection Status -->
+                <div id="ankiSettingsPanel" class="rounded-xl border-2 p-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div id="ankiSettingsDot" class="w-3 h-3 rounded-full bg-gray-400"></div>
+                            <span class="font-semibold text-gray-700">Anki Desktop</span>
+                            <span id="ankiSettingsLabel" class="text-sm text-gray-500">not detected</span>
+                        </div>
+                    </div>
+                    <div id="ankiSetupGuide" class="mt-3 text-sm text-gray-600">
+                        <p class="mb-2">Cards queue automatically to the cloud. To deliver them to Anki, install <strong>AnkiConnect</strong> once:</p>
+                        <ol class="list-decimal list-inside space-y-1 bg-gray-50 rounded-lg p-3 text-xs">
+                            <li>Open <strong>Anki Desktop</strong> on your Mac</li>
+                            <li>Tools → Add-ons → Get Add-ons</li>
+                            <li>Enter code: <code class="bg-white border px-1 rounded font-mono">2055492159</code></li>
+                            <li>Restart Anki — done ✓</li>
+                        </ol>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Anki Deck Name</label>
                     <div class="flex gap-2">

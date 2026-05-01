@@ -126,27 +126,71 @@ async function checkStatus() {
         const response = await fetch('/api/health');
         const data = await response.json();
 
-        // Update status indicators
+        const ankiOk = data.components.anki?.status === 'healthy';
         updateStatusDot('dictStatus', data.components.database?.status === 'healthy');
         updateStatusDot('geminiStatus', data.components.gemini?.status === 'healthy');
-        updateStatusDot('ankiStatus', data.components.anki?.status === 'healthy');
+        updateStatusDot('ankiStatus', ankiOk);
+        updateAnkiPanels(ankiOk);
 
     } catch (error) {
         console.error('Health check failed:', error);
-        // Set all indicators to disconnected on error
         updateStatusDot('dictStatus', false);
         updateStatusDot('geminiStatus', false);
         updateStatusDot('ankiStatus', false);
+        updateAnkiPanels(false);
     }
 }
 
 function updateStatusDot(elementId, isConnected) {
     const dot = document.getElementById(elementId);
     if (dot) {
-        // Set color directly - green for connected, gray for disconnected
         dot.style.backgroundColor = isConnected ? '#22c55e' : '#9ca3af';
     }
 }
+
+function updateAnkiPanels(isConnected) {
+    // Status bar tooltip
+    const tooltipStatus = document.getElementById('ankiTooltipStatus');
+    if (tooltipStatus) {
+        tooltipStatus.textContent = isConnected ? '✅ Anki connected' : '⚪ Anki not detected';
+        tooltipStatus.className = isConnected
+            ? 'font-semibold text-sm mb-2 text-green-600'
+            : 'font-semibold text-sm mb-2 text-gray-500';
+    }
+
+    // Settings panel
+    const panel = document.getElementById('ankiSettingsPanel');
+    const dot = document.getElementById('ankiSettingsDot');
+    const label = document.getElementById('ankiSettingsLabel');
+    const guide = document.getElementById('ankiSetupGuide');
+    if (panel && dot && label && guide) {
+        if (isConnected) {
+            panel.className = 'rounded-xl border-2 border-green-200 bg-green-50 p-4';
+            dot.style.backgroundColor = '#22c55e';
+            label.textContent = 'connected';
+            label.className = 'text-sm text-green-600';
+            guide.classList.add('hidden');
+        } else {
+            panel.className = 'rounded-xl border-2 border-amber-200 bg-amber-50 p-4';
+            dot.style.backgroundColor = '#9ca3af';
+            label.textContent = 'not detected';
+            label.className = 'text-sm text-gray-500';
+            guide.classList.remove('hidden');
+        }
+    }
+}
+
+// Anki status tooltip toggle
+document.addEventListener('DOMContentLoaded', () => {
+    const wrapper = document.getElementById('ankiStatusWrapper');
+    const tooltip = document.getElementById('ankiTooltip');
+    if (wrapper && tooltip) {
+        wrapper.addEventListener('click', () => tooltip.classList.toggle('hidden'));
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) tooltip.classList.add('hidden');
+        });
+    }
+});
 
 async function loadDecks() {
     const btn = document.getElementById('loadDecksBtn');
@@ -286,9 +330,8 @@ function displayResults(results, count) {
             badgeHtml += `<span class="ml-2 px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full border border-orange-200">🔥 Common</span>`;
         } else if (result.hsk_level && result.hsk_level <= 6) {
             badgeHtml += `<span class="ml-2 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full border border-blue-200">HSK ${result.hsk_level}</span>`;
-        } else {
-            badgeHtml += `<span class="ml-2 px-3 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded-full border border-gray-200">Rare</span>`;
         }
+        // No badge for unlabelled words — most CC-CEDICT entries lack HSK metadata
 
         card.innerHTML = `
             <div class="flex items-center justify-between">
