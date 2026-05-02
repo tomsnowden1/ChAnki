@@ -439,6 +439,55 @@ input, select { font-family: var(--font-body); }
   line-height: 1.5;
 }
 
+/* Keyboard-focused result (↑/↓ navigation) — subtle cinnabar outline */
+.result-card--focused {
+  outline: 2px solid var(--cinnabar-2);
+  outline-offset: -2px;
+}
+
+/* ============================================================================
+   10b. RECENT SEARCHES
+   ============================================================================ */
+.recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-8);
+}
+.recent-item {
+  background: var(--paper-2);
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease);
+}
+.recent-item:hover { background: var(--paper-3); }
+.recent-item__hanzi {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1;
+  flex-shrink: 0;
+  font-family: var(--font-hanzi-serif);
+}
+.recent-item__body { flex: 1; min-width: 0; }
+.recent-item__pinyin {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+.recent-item__def {
+  font-size: 12px;
+  color: var(--fg-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ============================================================================
    11. SEAL DIVIDER
    ============================================================================ */

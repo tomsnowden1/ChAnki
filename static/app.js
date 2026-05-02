@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     checkStatus();
     setupEventListeners();
     setupVoiceInput();
+    setupKeyboard();
+    renderRecent();
 });
 
 // Register service worker (PWA)
@@ -84,9 +86,14 @@ function setupEventListeners() {
 
         if (!query) {
             hideResults();
+            renderRecent();
             document.getElementById('searchingIndicator').style.opacity = '0';
             return;
         }
+
+        // Hide the recent panel as soon as the user starts typing
+        const recentWrap = document.getElementById('recentWrap');
+        if (recentWrap) recentWrap.classList.add('hidden');
 
         document.getElementById('searchingIndicator').style.opacity = '1';
 
@@ -391,6 +398,7 @@ function displayResults(results, count) {
 
 function selectWord(word) {
     selectedWord = word;
+    recordRecent(word);
 
     const T = window.ChAnkiTone;
 
@@ -754,4 +762,145 @@ async function testGeminiKey() {
             statusDiv.classList.add('hidden');
         }, 10000);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Recent searches (localStorage, max 10, deduped by simplified hanzi)
+// ---------------------------------------------------------------------------
+const RECENT_KEY = 'chanki:recent';
+const RECENT_MAX = 10;
+
+function _readRecent() {
+    try {
+        const raw = localStorage.getItem(RECENT_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+}
+
+function _writeRecent(items) {
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(items)); } catch {}
+}
+
+/** Save a word to the recent list when the user actually picks it. */
+function recordRecent(word) {
+    if (!word || !word.simplified) return;
+    const entry = {
+        simplified: word.simplified,
+        pinyin: word.pinyin,
+        hsk_level: word.hsk_level || null,
+        definition: (word.definitions && word.definitions[0]) || '',
+        ts: Date.now(),
+    };
+    const all = _readRecent().filter(e => e.simplified !== entry.simplified);
+    all.unshift(entry);
+    _writeRecent(all.slice(0, RECENT_MAX));
+}
+
+/** Render the recent list above search results, only when the input is empty. */
+function renderRecent() {
+    const wrap = document.getElementById('recentWrap');
+    if (!wrap) return;
+    const input = document.getElementById('searchInput');
+    if (input && input.value.trim() !== '') {
+        wrap.classList.add('hidden');
+        return;
+    }
+    const items = _readRecent();
+    if (items.length === 0) {
+        wrap.classList.add('hidden');
+        return;
+    }
+    const T = window.ChAnkiTone;
+    const list = document.getElementById('recentList');
+    list.innerHTML = '';
+    items.forEach(it => {
+        const card = document.createElement('div');
+        card.className = 'recent-item';
+        const hanziHtml = T ? T.colorize(it.simplified, it.pinyin) : it.simplified;
+        const pinyinHtml = T ? T.colorizePinyin(it.pinyin) : it.pinyin;
+        const hskBadge = it.hsk_level
+            ? `<span class="badge badge--hsk badge--hsk-${it.hsk_level}">HSK ${it.hsk_level}</span>`
+            : '';
+        card.innerHTML = `
+            <div class="recent-item__hanzi hanzi">${hanziHtml}</div>
+            <div class="recent-item__body">
+                <div class="recent-item__pinyin pinyin">${pinyinHtml}</div>
+                <div class="recent-item__def">${it.definition}</div>
+            </div>
+            ${hskBadge}
+        `;
+        card.onclick = () => {
+            // Re-trigger the search with this hanzi so the user can pick it again
+            input.value = it.simplified;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        list.appendChild(card);
+    });
+    wrap.classList.remove('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard shortcuts: / focus search, Esc close/blur, ↑↓ navigate, Enter pick
+// ---------------------------------------------------------------------------
+let _focusedResultIdx = -1;
+
+function setupKeyboard() {
+    document.addEventListener('keydown', (e) => {
+        const target = e.target;
+        const inField = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT');
+        const modal = document.getElementById('settingsModal');
+        const modalOpen = modal && modal.classList.contains('active');
+
+        // Esc — close modal first, otherwise blur active input
+        if (e.key === 'Escape') {
+            if (modalOpen) {
+                closeSettingsModal();
+                e.preventDefault();
+                return;
+            }
+            if (inField) target.blur();
+            return;
+        }
+
+        // / — focus the search input (only when not already in a field)
+        if (e.key === '/' && !inField && !modalOpen) {
+            e.preventDefault();
+            document.getElementById('searchInput').focus();
+            document.getElementById('searchInput').select();
+            return;
+        }
+
+        // ↑ ↓ — navigate result cards (work both in and out of search input)
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !modalOpen) {
+            const cards = Array.from(document.querySelectorAll('#resultsList .result-card'));
+            if (cards.length === 0) return;
+            e.preventDefault();
+            cards.forEach(c => c.classList.remove('result-card--focused'));
+            if (_focusedResultIdx < 0) {
+                _focusedResultIdx = e.key === 'ArrowDown' ? 0 : cards.length - 1;
+            } else {
+                _focusedResultIdx += e.key === 'ArrowDown' ? 1 : -1;
+                if (_focusedResultIdx < 0) _focusedResultIdx = cards.length - 1;
+                if (_focusedResultIdx >= cards.length) _focusedResultIdx = 0;
+            }
+            const c = cards[_focusedResultIdx];
+            c.classList.add('result-card--focused');
+            c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+
+        // Enter — when in search input with results visible, pick focused (or first)
+        if (e.key === 'Enter' && target && target.id === 'searchInput' && !modalOpen) {
+            const cards = document.querySelectorAll('#resultsList .result-card');
+            if (cards.length === 0) return;
+            const idx = _focusedResultIdx >= 0 ? _focusedResultIdx : 0;
+            cards[idx].click();
+            e.preventDefault();
+            return;
+        }
+    });
+
+    // Reset focus on each new search
+    const input = document.getElementById('searchInput');
+    if (input) input.addEventListener('input', () => { _focusedResultIdx = -1; });
 }
