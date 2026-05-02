@@ -455,10 +455,85 @@ async function startGenerating() {
 
 let generatedSentences = [];
 let selectedSentenceIndex = 0;
+let _activeEventSource = null;  // close any prior stream when starting a new one
 
 async function generateSentencesForCard() {
     if (!selectedWord) return;
 
+    // Prefer SSE streaming so each sentence appears as soon as Gemini emits it.
+    // Fall back to the POST endpoint if EventSource isn't supported.
+    if (typeof EventSource !== 'undefined') {
+        return generateSentencesViaSSE();
+    }
+    return generateSentencesViaPost();
+}
+
+async function generateSentencesViaSSE() {
+    if (_activeEventSource) {
+        try { _activeEventSource.close(); } catch {}
+    }
+    generatedSentences = [];
+
+    const params = new URLSearchParams({
+        hanzi: selectedWord.simplified,
+        pinyin: selectedWord.pinyin,
+        definition: selectedWord.definitions[0],
+        hsk_level: String(selectedWord.hsk_level || 3),
+    });
+    const es = new EventSource(`/api/generate-sentences/stream?${params.toString()}`);
+    _activeEventSource = es;
+
+    let gotAny = false;
+
+    es.onmessage = (ev) => {
+        // Heartbeats are comment lines (": ping") which EventSource silently
+        // discards — only real `data:` events fire onmessage.
+        if (!ev.data || ev.data === '{}') return;
+        try {
+            const sentence = JSON.parse(ev.data);
+            generatedSentences.push(sentence);
+            renderSentenceOptions();
+            // First sentence — swap progress bar for the picker
+            if (!gotAny) {
+                gotAny = true;
+                document.getElementById('generationProgress').classList.add('hidden');
+                document.getElementById('generatedContent').classList.remove('hidden');
+            }
+        } catch (e) {
+            console.warn('Bad SSE payload:', ev.data, e);
+        }
+    };
+
+    es.addEventListener('done', () => {
+        es.close();
+        _activeEventSource = null;
+        if (!gotAny) {
+            document.getElementById('progressText').textContent =
+                'No sentences found. Add a Gemini key in Settings to enable AI fallback.';
+        }
+    });
+
+    es.addEventListener('error', (ev) => {
+        // Could be either a transport error or our explicit `event: error` from the server
+        try {
+            const body = ev.data ? JSON.parse(ev.data) : null;
+            if (body && body.error) {
+                document.getElementById('progressText').textContent = body.error;
+            } else if (!gotAny) {
+                // Transport-level failure before any data arrived → fall back to POST
+                console.warn('SSE failed before first event; falling back to POST');
+                es.close();
+                _activeEventSource = null;
+                generateSentencesViaPost();
+                return;
+            }
+        } catch {}
+        try { es.close(); } catch {}
+        _activeEventSource = null;
+    });
+}
+
+async function generateSentencesViaPost() {
     try {
         const response = await fetch('/api/generate-sentences', {
             method: 'POST',

@@ -161,6 +161,83 @@ Do not include any explanation, just the JSON."""
             logger.error(f"Gemini async generation error: {e}")
             return [{"error": "Error connecting to Gemini."}]
 
+    async def generate_sentences_stream(self, hanzi: str, pinyin: str, definition: str,
+                                        hsk_level: int = 3):
+        """
+        Async generator yielding one sentence dict at a time.
+
+        Uses NDJSON output (one JSON object per line, no array wrapper) so
+        each sentence can be parsed and yielded as soon as Gemini finishes
+        its line — first sentence in <1s instead of waiting 2-3s for the
+        full array. Buffers partial lines across stream chunks.
+        """
+        if not self.model:
+            yield {"error": "Connect Gemini to generate sentences."}
+            return
+
+        prompt = self._sentences_stream_prompt(hanzi, pinyin, definition, hsk_level or 3)
+
+        try:
+            response = await self.model.generate_content_async(prompt, stream=True)
+            buffer = ""
+            async for chunk in response:
+                buffer += (chunk.text or "")
+                # Strip a leading markdown fence if Gemini emits one despite the prompt
+                if buffer.startswith("```"):
+                    nl = buffer.find("\n")
+                    if nl == -1:
+                        continue  # waiting for the rest of the fence line
+                    buffer = buffer[nl + 1:]
+
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    obj = self._try_parse_sentence_line(line)
+                    if obj is not None:
+                        yield obj
+
+            # Final remainder (no trailing newline + possible closing fence)
+            tail = buffer.strip().rstrip("`").strip()
+            if tail:
+                obj = self._try_parse_sentence_line(tail)
+                if obj is not None:
+                    yield obj
+        except Exception as e:
+            logger.error(f"Gemini stream error: {e}")
+            yield {"error": "Error connecting to Gemini."}
+
+    @staticmethod
+    def _sentences_stream_prompt(hanzi: str, pinyin: str, definition: str, hsk_level: int) -> str:
+        """NDJSON variant — one JSON object per line, no array, no fences."""
+        context = f" ({pinyin}, meaning: {definition})" if definition else ""
+        return f"""Generate 3 distinct, natural Chinese sentences using the word {hanzi}{context} at HSK Level {hsk_level}.
+
+Requirements:
+- Use simplified Chinese characters
+- Each sentence must naturally demonstrate the word's meaning
+- Vary sentence structure and context across the 3 examples
+- HSK {hsk_level} vocabulary difficulty
+- Include a short EN→ZH production hint per sentence (1-2 sentences: useful collocations, a memory trick, or a usage note that helps a learner recall {hanzi})
+
+Output format: exactly 3 lines, each a single complete JSON object on its own line. NO surrounding array brackets. NO markdown code fences. NO explanation. Each line has this shape:
+{{"hanzi":"Chinese sentence","pinyin":"pinyin with tone marks","english":"English translation","hint":"Short EN→ZH production hint"}}"""
+
+    @staticmethod
+    def _try_parse_sentence_line(line: str):
+        """Parse a single NDJSON line, return dict or None on malformed input."""
+        line = line.strip()
+        if not line or line.startswith("```"):
+            return None
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(obj, dict):
+            return None
+        if not all(k in obj for k in ("hanzi", "pinyin", "english")):
+            return None
+        obj.setdefault("hint", "")
+        return obj
+
     @staticmethod
     def _sentences_prompt(hanzi: str, pinyin: str, definition: str, hsk_level: int) -> str:
         """Shared prompt body for sync + async sentence generation."""
