@@ -57,6 +57,7 @@ async def startup_event():
         initialize_database,
         check_and_download_dictionary,
         check_and_seed_sentences,
+        seed_hsk_levels,
     )
 
     initialize_database()  # also calls setup_fts
@@ -65,6 +66,9 @@ async def startup_event():
     # Self-healing: Check and auto-seed dictionary if needed
     db_status = check_and_download_dictionary(auto_seed=True)
     logger.info(db_status["message"])
+
+    # HSK levels must run after the dictionary seed (it tags existing rows)
+    seed_hsk_levels()
 
     # Sentence corpus must run after the dictionary seed so jieba filtering works
     sent_status = check_and_seed_sentences(auto_seed=True)

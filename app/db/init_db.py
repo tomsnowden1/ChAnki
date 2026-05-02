@@ -4,8 +4,10 @@ from app.models import AppSettings, DictionaryEntry, Sentence
 from app.db.cedict_downloader import CEDICTDownloader
 from app.db.tatoeba_downloader import TatoebaDownloader
 from sqlalchemy import text
+from pathlib import Path
 import re
 import logging
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,12 @@ _TONE_STRIP = re.compile(r'[\d\s]')
 def _pinyin_plain(pinyin: str) -> str:
     """Strip tone numbers and spaces: 'ni3 hao3' → 'nihao'"""
     return _TONE_STRIP.sub('', pinyin.lower())
+
+
+def _pinyin_plain_from_marks(marked: str) -> str:
+    """'àihào' → 'aihao' — decompose unicode and strip combining diacritics."""
+    nfd = unicodedata.normalize('NFD', marked.lower())
+    return ''.join(c for c in nfd if unicodedata.category(c) != 'Mn').replace(' ', '')
 
 
 def run_schema_migrations():
@@ -295,6 +303,72 @@ def _insert_fts_batch(db, dict_batch, fts_batch):
                 {'rid': entry.id, 'txt': text_content}
             )
     db.commit()
+
+
+def seed_hsk_levels():
+    """
+    Populate `dictionary.hsk_level` from the vendored HSK 1-6 word list at
+    `data/hsk_levels.tsv` (sourced from krmanik/HSK-3.0, MIT-licensed, the
+    HSK 2.0 sublist with levels 1-6).
+
+    The list has format `simplified<TAB>pinyin<TAB>level`. We match against
+    the existing `dictionary` table by simplified hanzi, with `pinyin_plain`
+    as a tiebreaker for homographs (e.g. 行 xíng/háng have different levels).
+
+    Idempotent: skips entirely when ≥4500 entries already carry an HSK level.
+    Only updates rows where `hsk_level IS NULL` so re-runs never overwrite.
+    """
+    tsv_path = Path(__file__).resolve().parents[2] / "data" / "hsk_levels.tsv"
+    if not tsv_path.exists():
+        logger.warning(f"HSK levels file not found at {tsv_path}; skipping seed")
+        return
+
+    with get_db() as db:
+        # Skip if already seeded — a fresh deploy that re-runs startup is a no-op
+        already = db.query(DictionaryEntry).filter(
+            DictionaryEntry.hsk_level.isnot(None)
+        ).count()
+        if already >= 4500:
+            logger.info(f"✓ HSK levels already seeded ({already:,} entries); skipping")
+            return
+
+        updated = 0
+        with open(tsv_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 3:
+                    continue
+                simplified, pinyin_marked, level_str = parts[0], parts[1], parts[2]
+                try:
+                    level = int(level_str)
+                except ValueError:
+                    continue
+                pp = _pinyin_plain_from_marks(pinyin_marked)
+
+                # Match by simplified, prefer pinyin tiebreak for homographs.
+                # SQLAlchemy update() with .filter chain is portable across
+                # SQLite + Postgres; only updates NULL hsk_level rows.
+                q = db.query(DictionaryEntry).filter(
+                    DictionaryEntry.simplified == simplified,
+                    DictionaryEntry.hsk_level.is_(None),
+                )
+                # First try: simplified + pinyin_plain match (handles homographs)
+                rows = q.filter(DictionaryEntry.pinyin_plain == pp).update(
+                    {"hsk_level": level}, synchronize_session=False
+                )
+                # Fallback: if no pinyin match, take any simplified match
+                if rows == 0:
+                    rows = db.query(DictionaryEntry).filter(
+                        DictionaryEntry.simplified == simplified,
+                        DictionaryEntry.hsk_level.is_(None),
+                    ).update({"hsk_level": level}, synchronize_session=False)
+                updated += rows
+
+        db.commit()
+        logger.info(f"✓ HSK levels seeded: {updated:,} dictionary entries tagged")
 
 
 SENTENCES_READY_THRESHOLD = 50_000
