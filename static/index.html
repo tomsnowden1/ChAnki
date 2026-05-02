@@ -13,13 +13,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ChAnki">
 
-  <!-- Fonts + design system tokens + component styles -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Self-hosted fonts (loaded from /static/fonts/) + design system tokens -->
+  <link rel="preload" href="/static/fonts/inter-tight.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/source-serif-4.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/chanki.css">
 
-  <!-- Lucide icons (1.5px stroke, scholarly weight) -->
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <!-- Lucide icons (self-hosted, pinned to v0.469.0, 1.5px stroke) -->
+  <script src="/static/vendor/lucide.js"></script>
 </head>
 
 <body>

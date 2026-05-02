@@ -1,13 +1,19 @@
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC_CACHE = `chanki-static-${VERSION}`;
 const API_CACHE = `chanki-api-${VERSION}`;
 
 const STATIC_ASSETS = [
   '/',
   '/static/app.js',
+  '/static/tone.js',
+  '/static/chanki.css',
   '/static/manifest.json',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
+  '/static/vendor/lucide.js',
+  '/static/fonts/source-serif-4.woff2',
+  '/static/fonts/inter-tight.woff2',
+  '/static/fonts/jetbrains-mono.woff2',
 ];
 
 self.addEventListener('install', (event) => {

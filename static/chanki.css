@@ -4,7 +4,30 @@
    Philosophy: calm & scholarly, rice paper & ink, no gradients, no shadows.
    ============================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600;8..60,700&family=Inter+Tight:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Self-hosted fonts (variable woff2 files; Latin script). For Chinese text
+   we rely on system CJK fonts via the fallback chain in --font-hanzi-* —
+   shipping Noto Serif SC / Noto Sans SC over the wire would add ~5MB. */
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/static/fonts/source-serif-4.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/static/fonts/inter-tight.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('/static/fonts/jetbrains-mono.woff2') format('woff2');
+}
 
 /* ============================================================================
    1. RAW TOKENS
