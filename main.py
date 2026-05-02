@@ -84,10 +84,11 @@ app.include_router(settings_router.router)
 app.include_router(anki.router)
 
 # Include UI helper routes
-from app.api import anki_ui, duplicate, sentences
+from app.api import anki_ui, duplicate, sentences, tts
 app.include_router(anki_ui.router)
 app.include_router(duplicate.router)
 app.include_router(sentences.router)
+app.include_router(tts.router)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

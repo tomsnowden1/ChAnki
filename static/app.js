@@ -419,15 +419,11 @@ function selectWord(word) {
         badgesEl.innerHTML = b;
     }
 
-    // TTS button
+    // TTS button — always available now that audio is rendered server-side
     const ttsBtn = document.getElementById('ttsWordBtn');
     if (ttsBtn) {
-        if (window.speechSynthesis) {
-            ttsBtn.classList.remove('hidden');
-            ttsBtn.onclick = () => speakChinese(word.simplified);
-        } else {
-            ttsBtn.classList.add('hidden');
-        }
+        ttsBtn.classList.remove('hidden');
+        ttsBtn.onclick = () => speakChinese(word.simplified);
     }
 
     // Reset generation state
@@ -528,9 +524,9 @@ function renderSentenceOptions() {
             <div class="sentence-body">
                 <div class="sentence-hanzi hanzi">
                     <span>${hanziHtml}</span>
-                    ${window.speechSynthesis ? `<button class="tts-sentence-btn tts-btn" aria-label="Listen" title="Listen">
+                    <button class="tts-sentence-btn tts-btn" aria-label="Listen" title="Listen">
                         <i data-lucide="volume-2"></i>
-                    </button>` : ''}
+                    </button>
                 </div>
                 ${pinyinHtml ? `<div class="sentence-pinyin pinyin">${pinyinHtml}</div>` : ''}
                 <div class="sentence-english">${englishText}</div>
@@ -666,42 +662,41 @@ function closeSettingsModal() {
 }
 
 // ---------------------------------------------------------------------------
-// Text-to-Speech via browser SpeechSynthesis API
+// Text-to-Speech via /api/tts (server-rendered with edge-tts)
+//
+// The browser's SpeechSynthesis API produces robotic Mandarin on most
+// desktops and refuses zh-CN entirely on iOS Safari. We render audio
+// server-side with edge-tts (Xiaoxiao neural voice) instead — same
+// quality as Microsoft Edge's read-aloud feature.
+//
+// Browser caches the audio by URL, so repeat plays are instant.
 // ---------------------------------------------------------------------------
-
-/** Resolve to the best zh-CN voice, waiting for voices to load if needed. */
-function _getChineseVoice() {
-    return new Promise((resolve) => {
-        const pick = () => {
-            const voices = window.speechSynthesis.getVoices();
-            // Prefer an exact zh-CN match, then any zh-* voice
-            const voice =
-                voices.find((v) => v.lang === 'zh-CN') ||
-                voices.find((v) => v.lang.startsWith('zh')) ||
-                null;
-            resolve(voice);
-        };
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length) {
-            pick();
-        } else {
-            // Voices aren't loaded yet — wait for the event (fires once on most browsers)
-            window.speechSynthesis.addEventListener('voiceschanged', pick, { once: true });
-        }
-    });
-}
+let _ttsAudio = null;  // single shared <Audio> so a new play stops the prior one
 
 async function speakChinese(text) {
-    if (!text || !window.speechSynthesis) return;
-    // Cancel any ongoing utterance first
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 0.9;    // slightly slower for clarity
-    utterance.pitch = 1.0;
-    const voice = await _getChineseVoice();
-    if (voice) utterance.voice = voice;
-    window.speechSynthesis.speak(utterance);
+    if (!text) return;
+    try {
+        // Stop anything already playing
+        if (_ttsAudio) {
+            _ttsAudio.pause();
+            _ttsAudio.currentTime = 0;
+        }
+        _ttsAudio = new Audio(`/api/tts?text=${encodeURIComponent(text)}`);
+        _ttsAudio.preload = 'auto';
+        await _ttsAudio.play();
+    } catch (err) {
+        // Most likely cause: autoplay policy on iOS — must be triggered by
+        // a user gesture, which our 🔊 click is. Fall back to SpeechSynthesis
+        // if it's available; otherwise the click silently no-ops.
+        console.warn('TTS playback failed:', err);
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'zh-CN';
+            u.rate = 0.9;
+            window.speechSynthesis.speak(u);
+        }
+    }
 }
 
 // Test Gemini API Key
