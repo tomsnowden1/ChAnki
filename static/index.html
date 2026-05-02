@@ -1,315 +1,247 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChAnki v2 - Chinese to Anki Bridge</title>
-    <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#667eea">
-    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="ChAnki">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Prevent flash of unstyled content while Tailwind JIT injects styles -->
-    <style id="fouc-guard">body { visibility: hidden }</style>
-    <script>
-        tailwind.config = {};
-        document.addEventListener('DOMContentLoaded', () => {
-            requestAnimationFrame(() => {
-                document.getElementById('fouc-guard').remove();
-            });
-        });
-    </script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChAnki</title>
 
-        body {
-            font-family: 'Inter', sans-serif;
-        }
+  <!-- PWA -->
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#b83a14">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ChAnki">
 
-        .hanzi-text {
-            font-family: 'Noto Sans SC', sans-serif;
-        }
+  <!-- Fonts + design system tokens + component styles -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="/static/chanki.css">
 
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .fade-in {
-            animation: fadeIn 0.3s ease-in;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 50;
-        }
-
-        .modal.active {
-            display: flex;
-        }
-
-        .debounce-indicator {
-            transition: opacity 0.3s;
-        }
-    </style>
+  <!-- Lucide icons (1.5px stroke, scholarly weight) -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 
-<body class="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-5xl">
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-8">
-            <div>
-                <h1 class="text-5xl font-bold gradient-bg bg-clip-text text-transparent">ChAnki v2</h1>
-                <p class="text-gray-600 text-lg mt-1">Chinese to Anki Bridge</p>
-            </div>
-            <button id="settingsBtn" class="px-6 py-3 bg-white rounded-xl shadow hover:shadow-lg transition-shadow">
-                ⚙️ Settings
-            </button>
-        </div>
+<body>
+<div class="wrap">
 
-        <!--Status Bar -->
-        <div id="statusBar" class="mb-6 flex justify-center gap-6 text-sm">
-            <div class="flex items-center gap-2">
-                <div id="dictStatus" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                <span class="text-gray-700">Dictionary</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <div id="geminiStatus" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                <span class="text-gray-700">Gemini AI</span>
-            </div>
-            <div class="relative flex items-center gap-2 cursor-pointer group" id="ankiStatusWrapper">
-                <div id="ankiStatus" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                <span class="text-gray-700">Anki</span>
-                <!-- Tooltip -->
-                <div id="ankiTooltip" class="hidden absolute top-7 left-1/2 -translate-x-1/2 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-left">
-                    <p id="ankiTooltipStatus" class="font-semibold text-sm mb-2 text-gray-500">Anki not detected</p>
-                    <p class="text-xs text-gray-600 mb-3">Cards are queued to the cloud and delivered automatically when Anki Desktop is open on your Mac.</p>
-                    <div class="bg-gray-50 rounded-lg p-3 text-xs">
-                        <p class="font-semibold text-gray-700 mb-1">One-time setup:</p>
-                        <ol class="list-decimal list-inside space-y-1 text-gray-600">
-                            <li>Open <strong>Anki Desktop</strong></li>
-                            <li>Tools → Add-ons → Get Add-ons</li>
-                            <li>Enter code: <code class="bg-white border px-1 rounded font-mono">2055492159</code></li>
-                            <li>Restart Anki</li>
-                        </ol>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <!-- ── Header ────────────────────────────────────────────────────────── -->
+  <header class="page-header">
+    <div class="wordmark" role="img" aria-label="ChAnki">
+      <div class="wordmark-seal">字</div>
+      <span class="wordmark-text">Ch<span class="wordmark-accent">Anki</span></span>
+    </div>
+    <button id="settingsBtn" class="iconbtn" aria-label="Open settings">
+      <i data-lucide="settings"></i>
+      Settings
+    </button>
+  </header>
 
-        <!-- Search Bar -->
-        <div class="bg-white rounded-2xl shadow-xl p-6 mb-8">
-            <div class="relative">
-                <input type="text" id="searchInput" placeholder="Enter English, Pinyin, or 汉字..."
-                    class="w-full pl-6 pr-14 py-4 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none text-lg transition-colors"
-                    autocomplete="off">
-                <button id="voiceBtn" type="button"
-                    class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-2xl px-2 py-1 rounded-lg hover:bg-purple-50 transition-colors"
-                    aria-label="Voice search">🎤</button>
-            </div>
-            <div id="searchingIndicator" class="debounce-indicator opacity-0 text-sm text-gray-500 mt-2">
-                Searching...
-            </div>
-        </div>
+  <!-- ── Status bar ─────────────────────────────────────────────────────── -->
+  <div id="statusBar" class="status-bar">
+    <div class="status-item">
+      <span id="dictStatus" class="status-dot"></span>
+      <span>Dictionary</span>
+    </div>
+    <div class="status-item">
+      <span id="geminiStatus" class="status-dot"></span>
+      <span>Gemini</span>
+    </div>
+    <div class="status-item status-item--clickable" id="ankiStatusWrapper" role="button"
+         aria-haspopup="true" aria-expanded="false">
+      <span id="ankiStatus" class="status-dot"></span>
+      <span>Anki</span>
+      <span id="ankiStatusNote" class="status-note mono">queued to cloud</span>
 
-        <!-- Messages -->
-        <div id="errorMessage" class="hidden bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-6 fade-in">
-            <p class="text-red-700"></p>
-        </div>
-        <div id="successMessage" class="hidden bg-green-50 border-2 border-green-300 rounded-xl p-4 mb-6 fade-in">
-            <p class="text-green-700"></p>
-        </div>
+      <!-- Anki tooltip -->
+      <div id="ankiTooltip" class="anki-tooltip hidden" role="tooltip">
+        <p id="ankiTooltipStatus" class="anki-tooltip__title">Anki not detected</p>
+        <p style="font-size:12px;color:var(--fg-3);line-height:1.5;margin-bottom:8px;">
+          Cards queue automatically. To deliver them, install AnkiConnect once:
+        </p>
+        <ol class="anki-tooltip__steps">
+          <li>Open <strong>Anki Desktop</strong></li>
+          <li>Tools → Add-ons → Get Add-ons</li>
+          <li>Enter code: <code>2055492159</code></li>
+          <li>Restart Anki</li>
+        </ol>
+      </div>
+    </div>
+  </div>
 
-        <!-- Search Results -->
-        <div id="resultsContainer" class="hidden mb-8 fade-in">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                Search Results
-                <span id="resultCount" class="text-sm font-normal text-gray-500"></span>
-            </h2>
-            <div id="resultsList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-        </div>
+  <!-- ── Search bar ─────────────────────────────────────────────────────── -->
+  <div class="search-wrap">
+    <i data-lucide="search" class="search-icon" aria-hidden="true"></i>
+    <input
+      type="text"
+      id="searchInput"
+      class="search-input"
+      placeholder="English, pinyin, or 汉字"
+      autocomplete="off"
+      spellcheck="false"
+      autofocus
+    >
+    <button id="voiceBtn" class="voice-btn hidden" type="button" aria-label="Voice search">
+      <i data-lucide="mic"></i>
+    </button>
+    <span id="searchingIndicator" class="searching-text" aria-live="polite">searching…</span>
+  </div>
 
-        <!-- Word Details -->
-        <div id="wordCard" class="hidden bg-white rounded-2xl shadow-2xl p-8 mb-8 fade-in">
-            <div class="text-center mb-6">
-                <div class="flex items-center justify-center gap-3 mb-3">
-                    <h2 id="selectedHanzi" class="text-7xl font-bold hanzi-text text-gray-800"></h2>
-                    <button id="ttsWordBtn"
-                        class="text-3xl text-gray-400 hover:text-purple-600 transition-colors hidden"
-                        title="Listen" aria-label="Speak word">🔊</button>
-                </div>
-                <p id="selectedPinyin" class="text-3xl text-purple-600 mb-3"></p>
-                <p id="selectedDefinition" class="text-xl text-gray-700"></p>
-            </div>
+  <!-- ── Inline messages ────────────────────────────────────────────────── -->
+  <div id="errorMessage" class="msg msg--error hidden" role="alert"><p></p></div>
+  <div id="successMessage" class="msg msg--success hidden" role="status"><p></p></div>
 
-            <!-- Generate button (shown before generation) -->
-            <div id="generatePrompt" class="mt-8 flex justify-center">
-                <button id="generateSentencesBtn"
-                    class="px-8 py-3 gradient-bg text-white rounded-xl font-semibold hover:opacity-90 transition-opacity shadow">
-                    ✨ Generate Example Sentences
-                </button>
-            </div>
+  <!-- ── Search results ─────────────────────────────────────────────────── -->
+  <div id="resultsContainer" class="hidden">
+    <div id="resultCount" class="caps" style="margin-bottom:12px;"></div>
+    <div id="resultsList" class="results-list"></div>
+  </div>
 
-            <!-- Generation Progress -->
-            <div id="generationProgress" class="hidden mt-8 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl">
-                <div class="text-center">
-                    <div
-                        class="inline-block w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-3">
-                    </div>
-                    <p id="progressText" class="text-gray-700 font-medium">Generating example sentences...</p>
-                </div>
-            </div>
+  <!-- ── Seal divider (appears when a word is selected) ─────────────────── -->
+  <div id="sealDivider" class="seal-divider hidden"></div>
 
-            <!-- Generated Content -->
-            <div id="generatedContent" class="hidden mt-8">
-                <div class="bg-gray-50 rounded-xl p-6 border-2 border-gray-100">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                        ✨ Select an Example Sentence
-                    </h3>
-
-                    <div id="sentenceOptionsList" class="space-y-3 mb-6">
-                        <!-- Radio buttons injected here -->
-                    </div>
-
-                    <div class="flex justify-center">
-                        <button id="addToAnkiBtn"
-                            class="px-10 py-4 gradient-bg text-white rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity shadow-lg flex items-center gap-2">
-                            <span>Add to Anki</span>
-                            <span class="text-2xl">→</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <!-- ── Word detail ────────────────────────────────────────────────────── -->
+  <div id="wordCard" class="word-card hidden">
+    <div class="word-header">
+      <div class="word-hanzi-row">
+        <div id="selectedHanzi" class="word-hanzi hanzi"></div>
+        <button id="ttsWordBtn" class="tts-btn hidden" aria-label="Speak word">
+          <i data-lucide="volume-2"></i>
+        </button>
+      </div>
+      <div id="selectedPinyin" class="word-pinyin pinyin"></div>
+      <div id="selectedDefinition" class="word-definition"></div>
+      <div id="wordBadges" class="word-badges"></div>
     </div>
 
-    <!-- Sentence Modal Removed -->
-
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal">
-        <div class="m-auto bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full mx-4">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-3xl font-bold text-gray-800">Settings</h2>
-                <button id="closeSettings" class="text-gray-500 hover:text-gray-700 text-3xl">&times;</button>
-            </div>
-
-            <form id="settingsForm" class="space-y-6">
-
-                <!-- Anki Connection Status -->
-                <div id="ankiSettingsPanel" class="rounded-xl border-2 p-4">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <div id="ankiSettingsDot" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                            <span class="font-semibold text-gray-700">Anki Desktop</span>
-                            <span id="ankiSettingsLabel" class="text-sm text-gray-500">not detected</span>
-                        </div>
-                    </div>
-                    <div id="ankiSetupGuide" class="mt-3 text-sm text-gray-600">
-                        <p class="mb-2">Cards queue automatically to the cloud. To deliver them to Anki, install <strong>AnkiConnect</strong> once:</p>
-                        <ol class="list-decimal list-inside space-y-1 bg-gray-50 rounded-lg p-3 text-xs">
-                            <li>Open <strong>Anki Desktop</strong> on your Mac</li>
-                            <li>Tools → Add-ons → Get Add-ons</li>
-                            <li>Enter code: <code class="bg-white border px-1 rounded font-mono">2055492159</code></li>
-                            <li>Restart Anki — done ✓</li>
-                        </ol>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Anki Deck Name</label>
-                    <div class="flex gap-2">
-                        <div class="relative flex-1">
-                            <input type="text" id="deckName" list="deckList"
-                                class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
-                                placeholder="Select or type deck name">
-                            <datalist id="deckList"></datalist>
-                        </div>
-                        <button type="button" id="loadDecksBtn"
-                            class="px-4 py-3 bg-gray-100 text-gray-600 rounded-lg font-semibold hover:bg-gray-200 transition-colors whitespace-nowrap">
-                            ↻ Load Decks
-                        </button>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Anki Note Type</label>
-                    <input type="text" id="modelName"
-                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
-                </div>
-
-                <!-- Gemini status (key managed via server env var GEMINI_API_KEY) -->
-                <div class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                    <div id="geminiSettingsDot" class="w-3 h-3 rounded-full bg-gray-400 flex-shrink-0"></div>
-                    <div class="flex-1">
-                        <span class="text-sm font-semibold text-gray-700">Gemini AI</span>
-                        <span id="geminiSettingsLabel" class="ml-2 text-sm text-gray-500">checking...</span>
-                    </div>
-                    <div id="geminiTestStatus" class="hidden"></div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Target HSK Level (1-6)</label>
-                    <select id="hskLevel"
-                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
-                        <option value="1">HSK 1</option>
-                        <option value="2">HSK 2</option>
-                        <option value="3">HSK 3</option>
-                        <option value="4">HSK 4</option>
-                        <option value="5">HSK 5</option>
-                        <option value="6">HSK 6</option>
-                    </select>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <input type="checkbox" id="toneColors" class="w-5 h-5 rounded border-gray-300">
-                    <label for="toneColors" class="text-gray-700">Enable Tone Colors</label>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <input type="checkbox" id="generateAudio" class="w-5 h-5 rounded border-gray-300">
-                    <label for="generateAudio" class="text-gray-700">Generate Audio</label>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <input type="checkbox" id="strictMode" class="w-5 h-5 rounded border-gray-300">
-                    <div>
-                        <label for="strictMode" class="text-gray-700 font-medium">Strict Mode</label>
-                        <p class="text-xs text-gray-500 mt-0.5">2 cards only: ZH→EN recognition + cloze sentence (instead of 4)</p>
-                    </div>
-                </div>
-
-                <div class="flex gap-4">
-                    <button type="submit"
-                        class="flex-1 py-3 gradient-bg text-white rounded-lg font-semibold hover:opacity-90 transition-opacity">
-                        Save Settings
-                    </button>
-                    <button type="button" id="cancelSettings"
-                        class="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
-                        Cancel
-                    </button>
-                </div>
-            </form>
-        </div>
+    <!-- Generate button (shown before generation) -->
+    <div id="generatePrompt" class="generate-prompt">
+      <button id="generateSentencesBtn" class="btn btn--primary">
+        Generate example sentences
+      </button>
     </div>
 
-    <script src="/static/app.js"></script>
+    <!-- Generation progress (hairline bar, no spinner) -->
+    <div id="generationProgress" class="generation-progress hidden">
+      <p id="progressText" class="progress-label">Generating 3 sentences with Gemini…</p>
+      <div class="progress-track">
+        <div class="progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sentence picker (sibling of word card, shown after generation) ─── -->
+  <div id="generatedContent" class="sentence-picker hidden">
+    <div class="sentence-picker__header caps">Select an example sentence</div>
+    <div id="sentenceOptionsList" class="sentence-list"></div>
+    <div class="add-anki-row">
+      <button id="addToAnkiBtn" class="btn btn--primary">Add to Anki →</button>
+    </div>
+  </div>
+
+</div><!-- /.wrap -->
+
+<!-- ── Settings modal ───────────────────────────────────────────────────── -->
+<div id="settingsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 id="settingsTitle">Settings</h2>
+      <button id="closeSettings" class="close-btn" aria-label="Close settings">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+
+    <form id="settingsForm" class="settings-form">
+
+      <!-- Anki status -->
+      <div id="ankiSettingsPanel" class="setting-group">
+        <div class="setting-group__header">
+          <span id="ankiSettingsDot" class="status-dot"></span>
+          <span class="setting-group__name">Anki Desktop</span>
+          <span id="ankiSettingsLabel" class="setting-group__status">not detected</span>
+        </div>
+        <div id="ankiSetupGuide" class="setup-guide">
+          <p>Cards queue automatically to the cloud. To deliver them, install <strong>AnkiConnect</strong> once:</p>
+          <ol class="setup-steps">
+            <li>Open <strong>Anki Desktop</strong> on your Mac</li>
+            <li>Tools → Add-ons → Get Add-ons</li>
+            <li>Enter code: <code>2055492159</code></li>
+            <li>Restart Anki</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- Deck name -->
+      <div class="form-field">
+        <label class="form-label" for="deckName">Deck name</label>
+        <div class="form-row">
+          <input type="text" id="deckName" list="deckList" class="form-input"
+                 placeholder="Select or type a deck name">
+          <datalist id="deckList"></datalist>
+          <button type="button" id="loadDecksBtn" class="btn btn--secondary" style="flex-shrink:0;">
+            <i data-lucide="refresh-cw"></i>
+            Load decks
+          </button>
+        </div>
+      </div>
+
+      <!-- Note type -->
+      <div class="form-field">
+        <label class="form-label" for="modelName">Note type</label>
+        <input type="text" id="modelName" class="form-input">
+      </div>
+
+      <!-- Gemini status -->
+      <div class="gemini-status-row">
+        <span id="geminiSettingsDot" class="status-dot" style="flex-shrink:0;"></span>
+        <span style="font-weight:600;font-size:14px;">Gemini AI</span>
+        <span id="geminiSettingsLabel" style="color:var(--fg-3);font-size:13px;margin-left:4px;">checking…</span>
+        <div id="geminiTestStatus" class="hidden"></div>
+      </div>
+
+      <!-- Target HSK level -->
+      <div class="form-field">
+        <label class="form-label" for="hskLevel">Target HSK level</label>
+        <select id="hskLevel" class="form-input">
+          <option value="1">HSK 1</option>
+          <option value="2">HSK 2</option>
+          <option value="3">HSK 3 (default)</option>
+          <option value="4">HSK 4</option>
+          <option value="5">HSK 5</option>
+          <option value="6">HSK 6</option>
+        </select>
+      </div>
+
+      <!-- Checkboxes -->
+      <div class="form-check">
+        <input type="checkbox" id="toneColors">
+        <label for="toneColors">Tone colors on cards</label>
+      </div>
+
+      <div class="form-check">
+        <input type="checkbox" id="generateAudio">
+        <label for="generateAudio">Generate audio</label>
+      </div>
+
+      <div class="form-check">
+        <input type="checkbox" id="strictMode">
+        <div>
+          <label for="strictMode">Strict mode</label>
+          <p class="form-check__desc">2 cards only: ZH→EN recognition + cloze sentence (instead of 4)</p>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Save</button>
+        <button type="button" id="cancelSettings" class="btn btn--secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Scripts: tone helper first, then app logic, then Lucide icon init -->
+<script src="/static/tone.js"></script>
+<script src="/static/app.js"></script>
+<script>lucide.createIcons({ strokeWidth: 1.5 });</script>
 </body>
-
 </html>

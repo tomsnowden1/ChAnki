@@ -49,17 +49,17 @@ function setupVoiceInput() {
 
         recognition.onstart = () => {
             listening = true;
-            btn.textContent = '🔴';
+            btn.classList.add('voice-btn--active');
             btn.setAttribute('aria-label', 'Stop voice search');
         };
         recognition.onend = () => {
             listening = false;
-            btn.textContent = '🎤';
+            btn.classList.remove('voice-btn--active');
             btn.setAttribute('aria-label', 'Voice search');
         };
         recognition.onerror = () => {
             listening = false;
-            btn.textContent = '🎤';
+            btn.classList.remove('voice-btn--active');
         };
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
@@ -157,18 +157,23 @@ async function checkAnkiLocal() {
 function updateStatusDot(elementId, isConnected) {
     const dot = document.getElementById(elementId);
     if (dot) {
-        dot.style.backgroundColor = isConnected ? '#22c55e' : '#9ca3af';
+        // Use design-token colors: --success (oklch green) vs --ink-4 (muted)
+        dot.style.background = isConnected
+            ? 'var(--success)'
+            : 'var(--ink-4)';
     }
 }
 
 function updateAnkiPanels(isConnected) {
-    // Status bar tooltip
+    // Status bar note text
+    const note = document.getElementById('ankiStatusNote');
+    if (note) note.textContent = isConnected ? 'connected' : 'queued to cloud';
+
+    // Tooltip title
     const tooltipStatus = document.getElementById('ankiTooltipStatus');
     if (tooltipStatus) {
-        tooltipStatus.textContent = isConnected ? '✅ Anki connected' : '⚪ Anki not detected';
-        tooltipStatus.className = isConnected
-            ? 'font-semibold text-sm mb-2 text-green-600'
-            : 'font-semibold text-sm mb-2 text-gray-500';
+        tooltipStatus.textContent = isConnected ? 'Anki connected' : 'Anki not detected';
+        tooltipStatus.style.color = isConnected ? 'var(--success)' : 'var(--fg-2)';
     }
 
     // Settings panel
@@ -178,16 +183,16 @@ function updateAnkiPanels(isConnected) {
     const guide = document.getElementById('ankiSetupGuide');
     if (panel && dot && label && guide) {
         if (isConnected) {
-            panel.className = 'rounded-xl border-2 border-green-200 bg-green-50 p-4';
-            dot.style.backgroundColor = '#22c55e';
+            panel.className = 'setting-group setting-group--ok';
+            dot.style.background = 'var(--success)';
             label.textContent = 'connected';
-            label.className = 'text-sm text-green-600';
+            label.className = 'setting-group__status setting-group__status--ok';
             guide.classList.add('hidden');
         } else {
-            panel.className = 'rounded-xl border-2 border-amber-200 bg-amber-50 p-4';
-            dot.style.backgroundColor = '#9ca3af';
+            panel.className = 'setting-group setting-group--warn';
+            dot.style.background = 'var(--ink-4)';
             label.textContent = 'not detected';
-            label.className = 'text-sm text-gray-500';
+            label.className = 'setting-group__status';
             guide.classList.remove('hidden');
         }
     }
@@ -196,10 +201,10 @@ function updateAnkiPanels(isConnected) {
 function updateGeminiSettingsPanel(isOk) {
     const dot = document.getElementById('geminiSettingsDot');
     const label = document.getElementById('geminiSettingsLabel');
-    if (dot) dot.style.backgroundColor = isOk ? '#22c55e' : '#9ca3af';
+    if (dot) dot.style.background = isOk ? 'var(--success)' : 'var(--ink-4)';
     if (label) {
         label.textContent = isOk ? 'active' : 'not configured';
-        label.className = isOk ? 'ml-2 text-sm text-green-600' : 'ml-2 text-sm text-gray-500';
+        label.style.color = isOk ? 'var(--success)' : 'var(--fg-3)';
     }
 }
 
@@ -233,7 +238,7 @@ async function loadDecks() {
                 option.value = deck;
                 list.appendChild(option);
             });
-            showSuccess(`Loaded ${data.decks.length} decks`);
+            showSuccess(`${data.decks.length} deck${data.decks.length !== 1 ? 's' : ''} loaded.`);
         } else {
             showError('Failed to load decks: ' + data.message);
         }
@@ -297,7 +302,7 @@ async function saveSettings(event) {
         });
 
         if (response.ok) {
-            showSuccess('Settings saved successfully!');
+            showSuccess('Settings saved.');
             currentSettings = await response.json();
             closeSettingsModal();
         } else {
@@ -333,56 +338,39 @@ function displayResults(results, count) {
     const resultCount = document.getElementById('resultCount');
 
     resultsList.innerHTML = '';
-    resultCount.textContent = `(${count} found)`;
+    resultCount.textContent = count === 1 ? '1 result' : `${count} results`;
 
-    // Client-side stable sort by HSK level ascending (null → 99).
-    // This acts as a safety net so HSK-tagged entries always surface first,
-    // complementing the precision-based ordering already applied on the server.
+    // Client-side stable sort by HSK ascending (null → 99) as a safety net.
     const sorted = [...results].sort((a, b) => (a.hsk_level ?? 99) - (b.hsk_level ?? 99));
+
+    const T = window.ChAnkiTone;
 
     sorted.forEach((result, index) => {
         const card = document.createElement('div');
+        card.className = 'result-card';
 
-        // Highlight the top result when it has an HSK level (genuinely common word)
-        const isTopMatch = index === 0 && result.hsk_level;
-        card.className = isTopMatch
-            ? 'bg-white p-5 rounded-xl shadow-md hover:shadow-lg cursor-pointer transition-all border-2 border-purple-200 hover:border-purple-400'
-            : 'bg-white p-5 rounded-xl shadow hover:shadow-lg cursor-pointer transition-all border-2 border-transparent hover:border-purple-300';
+        // Tone-colored hanzi and pinyin
+        const hanziHtml = T ? T.colorize(result.simplified, result.pinyin) : result.simplified;
+        const pinyinHtml = T ? T.colorizePinyin(result.pinyin) : result.pinyin;
 
-        // --- Badges ---
+        // Badges (right-aligned)
         let badgeHtml = '';
-
-        // "Best match" crown on the top common-word result
-        if (isTopMatch) {
-            badgeHtml += `<span class="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full border border-purple-300">★ Best match</span>`;
-        }
-
-        // AI-generated badge
         if (result.is_ai_generated) {
-            badgeHtml += `<span class="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-xs font-semibold rounded-full shadow">🤖 AI</span>`;
+            badgeHtml += `<span class="badge badge--ai">AI</span>`;
         }
-
-        // HSK level badge — color-coded by tier so users can judge commonality at a glance:
-        //   HSK 1–2 (most common everyday words)  → green
-        //   HSK 3–4 (intermediate vocabulary)      → orange
-        //   HSK 5–6 (advanced/literary)            → blue
         if (result.hsk_level) {
-            const h = result.hsk_level;
-            const [bg, fg, border] = h <= 2
-                ? ['bg-green-100',  'text-green-700',  'border-green-200']
-                : h <= 4
-                ? ['bg-orange-100', 'text-orange-700', 'border-orange-200']
-                : ['bg-blue-100',   'text-blue-700',   'border-blue-200'];
-            badgeHtml += `<span class="px-2 py-0.5 ${bg} ${fg} text-xs font-semibold rounded-full border ${border}">HSK ${h}</span>`;
+            badgeHtml += `<span class="badge badge--hsk">HSK ${result.hsk_level}</span>`;
         }
 
         card.innerHTML = `
-            <div class="flex items-center flex-wrap gap-2">
-                <span class="text-4xl hanzi-text font-bold text-gray-800">${result.simplified}</span>
-                <span class="text-lg text-purple-600">${result.pinyin}</span>
-                <div class="flex flex-wrap gap-1">${badgeHtml}</div>
+            <div class="result-card__hanzi hanzi">${hanziHtml}</div>
+            <div class="result-card__body">
+                <div class="result-card__row">
+                    <div class="result-card__pinyin pinyin">${pinyinHtml}</div>
+                    ${badgeHtml ? `<div class="result-card__badges">${badgeHtml}</div>` : ''}
+                </div>
+                <div class="result-card__def">${result.definitions.slice(0, 2).join('; ')}</div>
             </div>
-            <div class="mt-2 text-gray-700 text-sm leading-relaxed">${result.definitions.slice(0, 2).join('; ')}</div>
         `;
         card.onclick = () => selectWord(result);
         resultsList.appendChild(card);
@@ -394,11 +382,26 @@ function displayResults(results, count) {
 function selectWord(word) {
     selectedWord = word;
 
-    document.getElementById('selectedHanzi').textContent = word.simplified;
-    document.getElementById('selectedPinyin').textContent = word.pinyin;
-    document.getElementById('selectedDefinition').textContent = word.definitions.join('; ');
+    const T = window.ChAnkiTone;
 
-    // Show TTS button for the word (only if SpeechSynthesis is available)
+    // Tone-colored hanzi and pinyin
+    document.getElementById('selectedHanzi').innerHTML =
+        T ? T.colorize(word.simplified, word.pinyin) : word.simplified;
+    document.getElementById('selectedPinyin').innerHTML =
+        T ? T.colorizePinyin(word.pinyin) : word.pinyin;
+    document.getElementById('selectedDefinition').textContent =
+        word.definitions.join(' · ');
+
+    // HSK + part-of-speech badges
+    const badgesEl = document.getElementById('wordBadges');
+    if (badgesEl) {
+        let b = '';
+        if (word.hsk_level) b += `<span class="badge badge--hsk">HSK ${word.hsk_level}</span>`;
+        if (word.part_of_speech) b += `<span class="badge badge--default">${word.part_of_speech}</span>`;
+        badgesEl.innerHTML = b;
+    }
+
+    // TTS button
     const ttsBtn = document.getElementById('ttsWordBtn');
     if (ttsBtn) {
         if (window.speechSynthesis) {
@@ -409,19 +412,21 @@ function selectWord(word) {
         }
     }
 
-    // Reset state — show generate button, hide progress + results
+    // Reset generation state
     document.getElementById('generatePrompt').classList.remove('hidden');
     document.getElementById('generationProgress').classList.add('hidden');
     document.getElementById('generatedContent').classList.add('hidden');
     generatedSentences = [];
 
-    // Reset Add to Anki button so a new word can be queued
+    // Reset Add to Anki button
     const addBtn = document.getElementById('addToAnkiBtn');
     if (addBtn) {
         addBtn.disabled = false;
-        addBtn.textContent = 'Add to Anki';
+        addBtn.textContent = 'Add to Anki →';
     }
 
+    // Show seal divider + word card
+    document.getElementById('sealDivider').classList.remove('hidden');
     const wordCard = document.getElementById('wordCard');
     wordCard.classList.remove('hidden');
     wordCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -430,7 +435,7 @@ function selectWord(word) {
 async function startGenerating() {
     document.getElementById('generatePrompt').classList.add('hidden');
     document.getElementById('generationProgress').classList.remove('hidden');
-    document.getElementById('progressText').textContent = 'Generating 3 distinct sentences with Gemini...';
+    document.getElementById('progressText').textContent = 'Generating 3 sentences with Gemini…';
     await generateSentencesForCard();
 }
 
@@ -474,11 +479,14 @@ function renderSentenceOptions() {
     const list = document.getElementById('sentenceOptionsList');
     list.innerHTML = '';
 
+    const T = window.ChAnkiTone;
+
     generatedSentences.forEach((sentence, index) => {
         const div = document.createElement('div');
-        // Check for error object
+
         if (sentence.error) {
-            div.innerHTML = `<p class="text-red-500">${sentence.error}</p>`;
+            div.style.cssText = 'padding:12px;color:var(--error);font-size:14px;';
+            div.textContent = sentence.error;
             list.appendChild(div);
             return;
         }
@@ -491,25 +499,28 @@ function renderSentenceOptions() {
         const englishText = sentence.english || sentence.sentence_english || '';
         const hintText = sentence.hint || '';
 
-        div.className = `p-4 border-2 rounded-xl cursor-pointer transition-all ${isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`;
+        const hanziHtml = T ? T.colorize(hanziText, pinyinText) : hanziText;
+        const pinyinHtml = T ? T.colorizePinyin(pinyinText) : pinyinText;
+
+        div.className = `sentence-option${isSelected ? ' sentence-option--selected' : ''}`;
         div.innerHTML = `
-            <div class="flex items-start gap-3">
-                <input type="radio" name="sentenceChoice" value="${index}"
-                    ${isSelected ? 'checked' : ''}
-                    class="mt-1 w-5 h-5 text-purple-600 cursor-pointer flex-shrink-0">
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <p class="text-xl hanzi-text font-semibold text-gray-800">${hanziText}</p>
-                        ${window.speechSynthesis ? `<button class="tts-sentence-btn text-lg text-gray-400 hover:text-purple-600 transition-colors flex-shrink-0" title="Listen">🔊</button>` : ''}
-                    </div>
-                    ${pinyinText ? `<p class="text-xs text-purple-500 mt-0.5">${pinyinText}</p>` : ''}
-                    <p class="text-sm text-gray-600 mt-1">${englishText}</p>
-                    ${hintText ? `<p class="text-xs text-gray-400 italic mt-1.5">💡 ${hintText}</p>` : ''}
+            <div class="sentence-radio">
+                <div class="sentence-radio__dot"></div>
+            </div>
+            <div class="sentence-body">
+                <div class="sentence-hanzi hanzi">
+                    <span>${hanziHtml}</span>
+                    ${window.speechSynthesis ? `<button class="tts-sentence-btn tts-btn" aria-label="Listen" title="Listen">
+                        <i data-lucide="volume-2"></i>
+                    </button>` : ''}
                 </div>
+                ${pinyinHtml ? `<div class="sentence-pinyin pinyin">${pinyinHtml}</div>` : ''}
+                <div class="sentence-english">${englishText}</div>
+                ${hintText ? `<div class="sentence-hint">${hintText}</div>` : ''}
             </div>
         `;
 
-        // TTS button — stop propagation so it doesn't also select the sentence
+        // TTS — stop propagation so it doesn't toggle sentence selection
         const ttsBtn = div.querySelector('.tts-sentence-btn');
         if (ttsBtn) {
             ttsBtn.addEventListener('click', (e) => {
@@ -519,19 +530,18 @@ function renderSentenceOptions() {
         }
 
         div.onclick = (e) => {
-            if (e.target.type === 'radio' || e.target.classList.contains('tts-sentence-btn')) return;
-            div.querySelector('input[type="radio"]').checked = true;
-            // Update styles
-            Array.from(list.children).forEach(c => {
-                c.className = c.className
-                    .replace('border-purple-500 bg-purple-50', 'border-gray-200');
-            });
-            div.className = div.className.replace('border-gray-200', 'border-purple-500 bg-purple-50');
+            if (e.target.closest('.tts-sentence-btn')) return;
+            // Update selection state
+            Array.from(list.children).forEach(c => c.classList.remove('sentence-option--selected'));
+            div.classList.add('sentence-option--selected');
             selectedSentenceIndex = index;
         };
 
         list.appendChild(div);
     });
+
+    // Re-run Lucide icon init for the dynamically-created volume icons
+    if (window.lucide) lucide.createIcons({ strokeWidth: 1.5 });
 }
 function closeSentenceModal() { /* Deprecated */ }
 function startSentenceSelection() { /* Deprecated in v2 */ }
@@ -544,12 +554,12 @@ async function confirmAndAddToAnki() {
 async function addToAnkiDirect(sentence) {
     const btn = document.getElementById('addToAnkiBtn');
     btn.disabled = true;
-    btn.textContent = 'Adding...';
+    btn.textContent = 'Queuing…';
 
-    // Show progress
+    // Show progress bar while queuing
     document.getElementById('generatedContent').classList.add('hidden');
     document.getElementById('generationProgress').classList.remove('hidden');
-    document.getElementById('progressText').textContent = 'Queuing cards for Anki...';
+    document.getElementById('progressText').textContent = 'Queuing cards…';
 
     try {
         const response = await fetch('/api/sync/queue', {
@@ -572,13 +582,15 @@ async function addToAnkiDirect(sentence) {
 
         if (data.queued) {
             const n = data.cards_created || 1;
-            showSuccess(`${n} card${n !== 1 ? 's' : ''} queued — will appear in Anki within 30s`);
-            btn.textContent = `✓ ${n} Card${n !== 1 ? 's' : ''} Queued`;
+            showSuccess(`${n} card${n !== 1 ? 's' : ''} queued. Will sync to Anki when it is open.`);
+            btn.textContent = `${n} card${n !== 1 ? 's' : ''} queued`;
             btn.disabled = true;
+            document.getElementById('generatedContent').classList.remove('hidden');
         } else {
-            showError(data.message || 'Failed to queue card');
+            showError(data.message || 'Failed to queue card.');
             btn.disabled = false;
-            btn.textContent = 'Add to Anki';
+            btn.textContent = 'Add to Anki →';
+            document.getElementById('generatedContent').classList.remove('hidden');
         }
 
         document.getElementById('generationProgress').classList.add('hidden');
@@ -586,7 +598,8 @@ async function addToAnkiDirect(sentence) {
     } catch (error) {
         showError('Failed to queue card: ' + error.message);
         btn.disabled = false;
-        btn.textContent = 'Add to Anki';
+        btn.textContent = 'Add to Anki →';
+        document.getElementById('generatedContent').classList.remove('hidden');
         document.getElementById('generationProgress').classList.add('hidden');
     }
 }
@@ -621,6 +634,8 @@ function hideResults() {
 
 function hideWordCard() {
     document.getElementById('wordCard').classList.add('hidden');
+    document.getElementById('generatedContent').classList.add('hidden');
+    document.getElementById('sealDivider').classList.add('hidden');
 }
 
 function openSettingsModal() {
