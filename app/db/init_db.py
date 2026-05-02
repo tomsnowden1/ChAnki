@@ -67,6 +67,15 @@ def _run_migrations_postgres():
         "ALTER TABLE card_queue ADD COLUMN IF NOT EXISTS hint        VARCHAR",
         # Composite index for the polling query (WHERE status='pending' ORDER BY created_at)
         "CREATE INDEX IF NOT EXISTS ix_card_queue_status_created ON card_queue (status, created_at)",
+        # Generated tsvector column + GIN index for English full-text search.
+        # Replaces the ILIKE '%query%' fallback (sequential-scans 124K rows) with
+        # an indexed plainto_tsquery match — sub-millisecond on the same data.
+        # ALTER + CREATE INDEX are both `IF NOT EXISTS` so this is idempotent.
+        """ALTER TABLE dictionary
+           ADD COLUMN IF NOT EXISTS definitions_ts tsvector
+           GENERATED ALWAYS AS (to_tsvector('english', definitions)) STORED""",
+        """CREATE INDEX IF NOT EXISTS ix_dictionary_definitions_ts
+           ON dictionary USING gin (definitions_ts)""",
     ]
     try:
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:

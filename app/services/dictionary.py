@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 _USE_FTS = engine.dialect.name == "sqlite"
+_IS_POSTGRES = engine.dialect.name == "postgresql"
 
 _TONE_STRIP = re.compile(r'[\d\s]')
 _HAN_RE = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf]')
@@ -205,11 +206,23 @@ class DictionaryService:
 
     def _search_english_fts(self, query: str, limit: int) -> List[DictionaryEntry]:
         """
-        Word-boundary FTS5 search on English definitions.
-        'dog' matches entries containing the token 'dog' but NOT 'dogged' or 'dogma'.
-        On Postgres (no FTS5), falls back to case-insensitive substring match.
+        Word-boundary full-text search on English definitions.
+
+        Three branches in priority order:
+          1. SQLite + FTS5 virtual table (local dev) — ranked by FTS5
+          2. Postgres + tsvector/GIN (Render) — ranked by ts_rank
+          3. ILIKE substring (last-resort fallback for either dialect when
+             the FTS infrastructure isn't available — e.g. mid-migration)
+
+        'dog' matches entries containing the token 'dog' as a word, NOT
+        'dogged' or 'dogma'. The Postgres path uses plainto_tsquery so
+        special chars in the query are auto-escaped.
         """
+        if _IS_POSTGRES:
+            return self._search_english_postgres(query, limit)
+
         if not _USE_FTS:
+            # SQLite without FTS (shouldn't normally happen, but safe fallback)
             return self.db.query(DictionaryEntry).filter(
                 DictionaryEntry.definitions.ilike(f'%{query.lower()}%')
             ).order_by(*self._commonality_order(query)).limit(limit).all()
@@ -247,6 +260,48 @@ class DictionaryService:
             return self.db.query(DictionaryEntry).filter(
                 DictionaryEntry.definitions.ilike(f'%{query.lower()}%')
             ).limit(limit).all()
+
+    def _search_english_postgres(self, query: str, limit: int) -> List[DictionaryEntry]:
+        """
+        Postgres-native FTS using the `definitions_ts` generated tsvector
+        column + GIN index added in app/db/init_db.py:_run_migrations_postgres.
+
+        plainto_tsquery handles tokenisation and operator escaping, so we
+        don't need to sanitise the query ourselves. Results are ordered by
+        ts_rank, then by our existing commonality tiers (HSK level + char
+        length + first-definition match).
+
+        Falls back to ILIKE if the migration hasn't run yet (definitions_ts
+        column missing).
+        """
+        try:
+            rows = self.db.execute(
+                text("""
+                    SELECT id
+                    FROM dictionary
+                    WHERE definitions_ts @@ plainto_tsquery('english', :q)
+                    ORDER BY ts_rank(definitions_ts, plainto_tsquery('english', :q)) DESC
+                    LIMIT :lim
+                """),
+                {'q': query, 'lim': limit}
+            ).fetchall()
+
+            if not rows:
+                return []
+
+            ids = [r[0] for r in rows]
+            # Preserve ts_rank order across the bulk fetch
+            entries_map = {
+                e.id: e for e in self.db.query(DictionaryEntry)
+                .filter(DictionaryEntry.id.in_(ids)).all()
+            }
+            return [entries_map[i] for i in ids if i in entries_map]
+
+        except Exception as e:
+            logger.warning(f"Postgres FTS failed ({e}), falling back to ILIKE")
+            return self.db.query(DictionaryEntry).filter(
+                DictionaryEntry.definitions.ilike(f'%{query.lower()}%')
+            ).order_by(*self._commonality_order(query)).limit(limit).all()
 
     # ------------------------------------------------------------------
     # Helpers
