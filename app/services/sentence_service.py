@@ -31,6 +31,37 @@ class SentenceService:
         count: int = 3,
     ) -> List[Dict[str, str]]:
         """Return up to `count` sentence dicts: {hanzi, pinyin, english, source}."""
+        results = self._tatoeba_lookup(hanzi, hsk_level, count)
+
+        if len(results) < count and self.gemini is not None:
+            needed = count - len(results)
+            results.extend(self._fallback_to_gemini(
+                hanzi, pinyin, definition, hsk_level, needed
+            ))
+
+        return [self._row_to_dict(r) for r in results]
+
+    async def find_sentences_async(
+        self,
+        hanzi: str,
+        pinyin: str = "",
+        definition: str = "",
+        hsk_level: int = 3,
+        count: int = 3,
+    ) -> List[Dict[str, str]]:
+        """Async variant — Tatoeba is sync SQL, only the Gemini fallback awaits."""
+        results = self._tatoeba_lookup(hanzi, hsk_level, count)
+
+        if len(results) < count and self.gemini is not None:
+            needed = count - len(results)
+            results.extend(await self._fallback_to_gemini_async(
+                hanzi, pinyin, definition, hsk_level, needed
+            ))
+
+        return [self._row_to_dict(r) for r in results]
+
+    def _tatoeba_lookup(self, hanzi: str, hsk_level: int, count: int) -> List[Sentence]:
+        """Fast SQL-only path. Shared by sync and async."""
         # Length cap loosens with target HSK: 8 / 16 / 32 chars.
         max_len = 8 if hsk_level <= 2 else (16 if hsk_level <= 4 else 32)
         candidates = (
@@ -52,23 +83,16 @@ class SentenceService:
                 .limit(count * 4)
                 .all()
             )
-        results = self._pick_diverse(candidates, count)
+        return self._pick_diverse(candidates, count)
 
-        if len(results) < count and self.gemini is not None:
-            needed = count - len(results)
-            results.extend(self._fallback_to_gemini(
-                hanzi, pinyin, definition, hsk_level, needed
-            ))
-
-        return [
-            {
-                "hanzi": r.hanzi,
-                "pinyin": r.pinyin,
-                "english": r.english,
-                "source": r.source,
-            }
-            for r in results
-        ]
+    @staticmethod
+    def _row_to_dict(r: Sentence) -> Dict[str, str]:
+        return {
+            "hanzi": r.hanzi,
+            "pinyin": r.pinyin,
+            "english": r.english,
+            "source": r.source,
+        }
 
     def _pick_diverse(self, rows: List[Sentence], count: int) -> List[Sentence]:
         """Bucket by length (short/med/long) and round-robin pick."""
@@ -95,13 +119,31 @@ class SentenceService:
     def _fallback_to_gemini(
         self, hanzi: str, pinyin: str, definition: str, hsk_level: int, needed: int
     ) -> List[Sentence]:
-        """Call Gemini, persist results into the sentences table, return objects."""
+        """Sync path — call Gemini, persist, return."""
         try:
             raw = self.gemini.generate_sentences(hanzi, pinyin, definition, hsk_level)
         except Exception as e:
             logger.error(f"Gemini fallback failed for '{hanzi}': {e}")
             return []
+        return self._persist_gemini_results(hanzi, hsk_level, raw, needed)
 
+    async def _fallback_to_gemini_async(
+        self, hanzi: str, pinyin: str, definition: str, hsk_level: int, needed: int
+    ) -> List[Sentence]:
+        """Async path — same logic, but doesn't block the FastAPI worker."""
+        try:
+            raw = await self.gemini.generate_sentences_async(
+                hanzi, pinyin, definition, hsk_level
+            )
+        except Exception as e:
+            logger.error(f"Gemini async fallback failed for '{hanzi}': {e}")
+            return []
+        return self._persist_gemini_results(hanzi, hsk_level, raw, needed)
+
+    def _persist_gemini_results(
+        self, hanzi: str, hsk_level: int, raw, needed: int
+    ) -> List[Sentence]:
+        """Validate Gemini output, persist into Sentence/SentenceWord, return rows."""
         valid = [s for s in raw if isinstance(s, dict) and "hanzi" in s and "english" in s]
         if not valid:
             return []

@@ -130,9 +130,42 @@ Do not include any explanation, just the JSON."""
             logger.warning("Gemini model not initialized")
             return [{"error": "Connect Gemini to generate sentences."}]
 
-        hsk_level = hsk_level or 3
+        prompt = self._sentences_prompt(hanzi, pinyin, definition, hsk_level or 3)
+
+        try:
+            response = self.model.generate_content(prompt)
+            return self._parse_sentences_response(response)
+        except Exception as e:
+            logger.error(f"Gemini generation error: {e}")
+            return [{"error": "Error connecting to Gemini."}]
+
+    async def generate_sentences_async(self, hanzi: str, pinyin: str, definition: str,
+                                       hsk_level: int = 3):
+        """
+        Async variant of generate_sentences.
+
+        Yields the same shape (list of {hanzi, pinyin, english, hint} dicts)
+        but uses google-generativeai's native async path so the FastAPI
+        worker isn't blocked on the 1-3s round-trip.
+        """
+        if not self.model:
+            logger.warning("Gemini model not initialized")
+            return [{"error": "Connect Gemini to generate sentences."}]
+
+        prompt = self._sentences_prompt(hanzi, pinyin, definition, hsk_level or 3)
+
+        try:
+            response = await self.model.generate_content_async(prompt)
+            return self._parse_sentences_response(response)
+        except Exception as e:
+            logger.error(f"Gemini async generation error: {e}")
+            return [{"error": "Error connecting to Gemini."}]
+
+    @staticmethod
+    def _sentences_prompt(hanzi: str, pinyin: str, definition: str, hsk_level: int) -> str:
+        """Shared prompt body for sync + async sentence generation."""
         context = f" ({pinyin}, meaning: {definition})" if definition else ""
-        prompt = f"""Generate 3 distinct, natural Chinese sentences using the word {hanzi}{context} at HSK Level {hsk_level}.
+        return f"""Generate 3 distinct, natural Chinese sentences using the word {hanzi}{context} at HSK Level {hsk_level}.
 
 Requirements:
 - Use simplified Chinese characters
@@ -144,37 +177,27 @@ Requirements:
 Return ONLY a JSON array, no explanation:
 [{{"hanzi": "Chinese sentence", "pinyin": "pinyin with tone marks", "english": "English translation", "hint": "Short EN→ZH production hint"}}]"""
 
-        try:
-            response = self.model.generate_content(prompt)
-            text = response.text.strip()
+    @staticmethod
+    def _parse_sentences_response(response):
+        """Strip markdown fences, parse JSON, validate shape. Shared sync/async."""
+        text = response.text.strip()
+        if '```json' in text:
+            text = text.split('```json')[1].split('```')[0].strip()
+        elif '```' in text:
+            text = text.split('```')[1].split('```')[0].strip()
 
-            # Clean potential markdown code blocks
-            if '```json' in text:
-                text = text.split('```json')[1].split('```')[0].strip()
-            elif '```' in text:
-                text = text.split('```')[1].split('```')[0].strip()
+        sentences = json.loads(text)
+        valid = []
+        if isinstance(sentences, list):
+            for s in sentences:
+                if all(k in s for k in ['hanzi', 'pinyin', 'english']):
+                    s.setdefault('hint', '')
+                    valid.append(s)
 
-            # Parse JSON
-            sentences = json.loads(text)
-
-            # Validate format — require hanzi/pinyin/english; hint is optional
-            valid_sentences = []
-            if isinstance(sentences, list):
-                for s in sentences:
-                    if all(k in s for k in ['hanzi', 'pinyin', 'english']):
-                        # Ensure hint key exists (may be absent if model skips it)
-                        s.setdefault('hint', '')
-                        valid_sentences.append(s)
-
-            if not valid_sentences:
-                logger.warning("Gemini returned invalid JSON structure")
-                return [{"error": "Failed to generate valid sentences."}]
-
-            return valid_sentences
-
-        except Exception as e:
-            logger.error(f"Gemini generation error: {e}")
-            return [{"error": "Error connecting to Gemini."}]
+        if not valid:
+            logger.warning("Gemini returned invalid JSON structure")
+            return [{"error": "Failed to generate valid sentences."}]
+        return valid
 
     def check_connection(self) -> bool:
         """Check if Gemini API is configured and working"""

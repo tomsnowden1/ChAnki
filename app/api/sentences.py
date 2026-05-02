@@ -42,7 +42,7 @@ async def generate_sentences(
             gemini = get_gemini(api_key)
 
         service = get_sentence_service(db, gemini)
-        sentences = service.find_sentences(
+        sentences = await service.find_sentences_async(
             request.hanzi,
             request.pinyin,
             request.definition,
