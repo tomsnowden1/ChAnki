@@ -33,3 +33,6 @@ gunicorn>=21.2.0
 
 # PostgreSQL Support (for Railway/Render/Supabase)
 psycopg2-binary>=2.9.9
+
+# Rate limiting (in-memory, per-IP, applied to /api/sync/queue)
+slowapi>=0.1.9

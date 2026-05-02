@@ -3,22 +3,23 @@ Sync API Endpoints
 Handles card queue management for cloud-to-local synchronization
 """
 
-from fastapi import APIRouter, Header, HTTPException, Depends
+from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 from app.models.card_queue import CardQueue
 from app.services.service_cache import get_settings as _get_settings
 from app.config import settings
+from app.middleware.rate_limit import limiter
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
-import os
 import secrets as _secrets
 
 router = APIRouter()
 
-# Get sync secret from environment (set in Railway)
-SYNC_SECRET = os.getenv("SYNC_SECRET", "development_secret_change_in_production")
+# Sync secret is now centrally managed by Pydantic Settings (see app/config.py).
+# Kept as a module-level alias for backwards-compat with the verify function.
+SYNC_SECRET = settings.sync_secret
 
 
 class QueueCardRequest(BaseModel):
@@ -48,7 +49,12 @@ def verify_sync_secret(x_sync_secret: str = Header(None)):
 
 
 @router.post("/queue")
-def queue_card(request: QueueCardRequest, db: Session = Depends(get_db_session)):
+@limiter.limit("30/minute")
+def queue_card(
+    request: Request,
+    payload: QueueCardRequest,
+    db: Session = Depends(get_db_session),
+):
     """
     Queue 2 or 4 Anki cards for later sync to local Anki.
 
@@ -56,6 +62,9 @@ def queue_card(request: QueueCardRequest, db: Session = Depends(get_db_session))
     Strict mode (2 cards): ZH→EN + ZH Sentence (cloze) only.
 
     Sentence card types are skipped if no sentence_hanzi is provided.
+
+    Rate-limited to 30 requests/minute per IP — slowapi requires a `request:
+    Request` parameter so the decorator can extract the client address.
     """
     db_settings = _get_settings(db)
     strict_mode = bool(db_settings.strict_mode) if db_settings else False
@@ -66,23 +75,23 @@ def queue_card(request: QueueCardRequest, db: Session = Depends(get_db_session))
         card_types = ["en_to_zh", "zh_to_en", "en_sentence", "zh_sentence"]
 
     # Drop sentence-type cards when no sentence data is available
-    has_sentence = bool(request.sentence_hanzi)
+    has_sentence = bool(payload.sentence_hanzi)
     if not has_sentence:
         card_types = [ct for ct in card_types if "sentence" not in ct]
 
     for card_type in card_types:
         card = CardQueue(
-            hanzi=request.hanzi,
-            pinyin=request.pinyin,
-            definition=request.definition,
-            sentence_hanzi=request.sentence_hanzi,
-            sentence_pinyin=request.sentence_pinyin,
-            sentence_english=request.sentence_english,
-            audio_url=request.audio_url,
-            hint=request.hint,
+            hanzi=payload.hanzi,
+            pinyin=payload.pinyin,
+            definition=payload.definition,
+            sentence_hanzi=payload.sentence_hanzi,
+            sentence_pinyin=payload.sentence_pinyin,
+            sentence_english=payload.sentence_english,
+            audio_url=payload.audio_url,
+            hint=payload.hint,
             card_type=card_type,
-            hsk_level=request.hsk_level,
-            part_of_speech=request.part_of_speech,
+            hsk_level=payload.hsk_level,
+            part_of_speech=payload.part_of_speech,
             status="pending",
         )
         db.add(card)

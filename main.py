@@ -2,7 +2,11 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from app.api import search, settings, anki, health, sync
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.api import search, settings as settings_router, anki, health, sync
+from app.config import settings as app_settings, DEFAULT_DEV_SYNC_SECRET
+from app.middleware.rate_limit import limiter
 from app.db.session import init_db
 import logging
 
@@ -25,11 +29,30 @@ app = FastAPI(
 from app.middleware.error_handler import ErrorHandlerMiddleware
 app.add_middleware(ErrorHandlerMiddleware)
 
+# --- Rate limiter (shared instance from app/middleware/rate_limit.py) ---
+# Routes opt in via @limiter.limit("...") — see app/api/sync.py.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on application startup"""
     logger.info("Initializing ChAnki v2.0...")
+
+    # --- Production safety check ---------------------------------------
+    # Refuse to boot if production is using the placeholder SYNC_SECRET —
+    # it would mean the sync endpoints are effectively unauthenticated.
+    if (
+        app_settings.environment.lower() == "production"
+        and app_settings.sync_secret == DEFAULT_DEV_SYNC_SECRET
+    ):
+        raise RuntimeError(
+            "Refusing to start: ENVIRONMENT=production but SYNC_SECRET is the "
+            "default development value. Set SYNC_SECRET to a real secret in "
+            "Render env vars before redeploying."
+        )
+
     from app.db.init_db import (
         initialize_database,
         check_and_download_dictionary,
@@ -53,7 +76,7 @@ async def startup_event():
 app.include_router(health.router)  # Health monitoring - first priority
 app.include_router(sync.router, prefix="/api/sync", tags=["sync"])  # Cloud-sync endpoints
 app.include_router(search.router)
-app.include_router(settings.router)
+app.include_router(settings_router.router)
 app.include_router(anki.router)
 
 # Include UI helper routes
