@@ -347,19 +347,29 @@ function displayResults(results, count) {
 
     sorted.forEach((result, index) => {
         const card = document.createElement('div');
-        card.className = 'result-card';
+
+        // First result with an HSK level = the most common / best match
+        const isTopMatch = index === 0 && result.hsk_level;
+        card.className = isTopMatch ? 'result-card result-card--top' : 'result-card';
 
         // Tone-colored hanzi and pinyin
         const hanziHtml = T ? T.colorize(result.simplified, result.pinyin) : result.simplified;
         const pinyinHtml = T ? T.colorizePinyin(result.pinyin) : result.pinyin;
 
-        // Badges (right-aligned)
+        // Badges, right-aligned in the row
         let badgeHtml = '';
         if (result.is_ai_generated) {
             badgeHtml += `<span class="badge badge--ai">AI</span>`;
         }
+        // ★ Top match — only on the first result when it carries an HSK level,
+        // meaning the ranking confidently identified a common word.
+        if (isTopMatch) {
+            badgeHtml += `<span class="badge badge--top">★ Top match</span>`;
+        }
+        // HSK badge: per-level color via .badge--hsk-N (mint→crimson, 1→6)
         if (result.hsk_level) {
-            badgeHtml += `<span class="badge badge--hsk">HSK ${result.hsk_level}</span>`;
+            const h = result.hsk_level;
+            badgeHtml += `<span class="badge badge--hsk badge--hsk-${h}">HSK ${h}</span>`;
         }
 
         card.innerHTML = `

@@ -741,10 +741,33 @@ input, select { font-family: var(--font-body); }
   color: var(--fg-3);
   border: var(--border-hairline);
 }
+/* HSK badges: each level has its own hue via --hsk-N variables.
+   cool → mint (common) through warm → crimson (advanced).
+   The level class sets --_hc; the base .badge--hsk reads it. */
 .badge--hsk {
-  background: color-mix(in oklch, var(--hsk-2) 18%, var(--paper-0));
-  color: color-mix(in oklch, var(--hsk-2) 90%, var(--ink-1));
-  border: 1px solid color-mix(in oklch, var(--hsk-2) 35%, transparent);
+  --_hc: var(--hsk-2); /* fallback if no level class */
+  background: color-mix(in oklch, var(--_hc) 18%, var(--paper-0));
+  color: color-mix(in oklch, var(--_hc) 90%, var(--ink-1));
+  border: 1px solid color-mix(in oklch, var(--_hc) 35%, transparent);
+}
+.badge--hsk-1 { --_hc: var(--hsk-1); }   /* mint    — most common */
+.badge--hsk-2 { --_hc: var(--hsk-2); }   /* sky     */
+.badge--hsk-3 { --_hc: var(--hsk-3); }   /* slate   */
+.badge--hsk-4 { --_hc: var(--hsk-4); }   /* purple  */
+.badge--hsk-5 { --_hc: var(--hsk-5); }   /* plum    */
+.badge--hsk-6 { --_hc: var(--hsk-6); }   /* crimson — most advanced */
+
+/* Top-match badge — cinnabar tint, typographic ★ */
+.badge--top {
+  background: var(--cinnabar-bg);
+  color: var(--cinnabar-2);
+  border: 1px solid color-mix(in oklch, var(--cinnabar-2) 30%, transparent);
+}
+
+/* Top-match result card: subtle left cinnabar rule */
+.result-card--top {
+  border-left: 2px solid var(--cinnabar-2);
+  padding-left: 18px; /* keeps content aligned (20px - 2px border) */
 }
 .badge--ai {
   background: color-mix(in oklch, var(--tone-4) 15%, var(--paper-0));
