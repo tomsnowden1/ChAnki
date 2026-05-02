@@ -335,41 +335,54 @@ function displayResults(results, count) {
     resultsList.innerHTML = '';
     resultCount.textContent = `(${count} found)`;
 
-    results.forEach(result => {
-        const card = document.createElement('div');
-        card.className = 'bg-white p-5 rounded-xl shadow hover:shadow-lg cursor-pointer transition-all border-2 border-transparent hover:border-purple-300';
+    // Client-side stable sort by HSK level ascending (null → 99).
+    // This acts as a safety net so HSK-tagged entries always surface first,
+    // complementing the precision-based ordering already applied on the server.
+    const sorted = [...results].sort((a, b) => (a.hsk_level ?? 99) - (b.hsk_level ?? 99));
 
-        // Badges
+    sorted.forEach((result, index) => {
+        const card = document.createElement('div');
+
+        // Highlight the top result when it has an HSK level (genuinely common word)
+        const isTopMatch = index === 0 && result.hsk_level;
+        card.className = isTopMatch
+            ? 'bg-white p-5 rounded-xl shadow-md hover:shadow-lg cursor-pointer transition-all border-2 border-purple-200 hover:border-purple-400'
+            : 'bg-white p-5 rounded-xl shadow hover:shadow-lg cursor-pointer transition-all border-2 border-transparent hover:border-purple-300';
+
+        // --- Badges ---
         let badgeHtml = '';
 
-        // AI Badge
-        if (result.is_ai_generated) {
-            badgeHtml += `<span class="ml-2 px-3 py-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-xs font-semibold rounded-full shadow">🤖 AI</span>`;
+        // "Best match" crown on the top common-word result
+        if (isTopMatch) {
+            badgeHtml += `<span class="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full border border-purple-300">★ Best match</span>`;
         }
 
-        // Frequency/Common Badge
-        // HSK 1-3 = Common (Orange)
-        // HSK 4-6 = Advanced (Blue - let's add this for better distinction)
-        // No HSK = Gray
-        if (result.hsk_level && result.hsk_level <= 3) {
-            badgeHtml += `<span class="ml-2 px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full border border-orange-200">🔥 Common</span>`;
-        } else if (result.hsk_level && result.hsk_level <= 6) {
-            badgeHtml += `<span class="ml-2 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full border border-blue-200">HSK ${result.hsk_level}</span>`;
+        // AI-generated badge
+        if (result.is_ai_generated) {
+            badgeHtml += `<span class="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-xs font-semibold rounded-full shadow">🤖 AI</span>`;
         }
-        // No badge for unlabelled words — most CC-CEDICT entries lack HSK metadata
+
+        // HSK level badge — color-coded by tier so users can judge commonality at a glance:
+        //   HSK 1–2 (most common everyday words)  → green
+        //   HSK 3–4 (intermediate vocabulary)      → orange
+        //   HSK 5–6 (advanced/literary)            → blue
+        if (result.hsk_level) {
+            const h = result.hsk_level;
+            const [bg, fg, border] = h <= 2
+                ? ['bg-green-100',  'text-green-700',  'border-green-200']
+                : h <= 4
+                ? ['bg-orange-100', 'text-orange-700', 'border-orange-200']
+                : ['bg-blue-100',   'text-blue-700',   'border-blue-200'];
+            badgeHtml += `<span class="px-2 py-0.5 ${bg} ${fg} text-xs font-semibold rounded-full border ${border}">HSK ${h}</span>`;
+        }
 
         card.innerHTML = `
-            <div class="flex items-center justify-between">
-                <div>
-                    <div class="flex items-center">
-                        <span class="text-4xl hanzi-text font-bold text-gray-800">${result.simplified}</span>
-                        <span class="ml-3 text-lg text-purple-600">${result.pinyin}</span>
-                        <div class="flex gap-1 ml-2">${badgeHtml}</div>
-                    </div>
-                </div>
+            <div class="flex items-center flex-wrap gap-2">
+                <span class="text-4xl hanzi-text font-bold text-gray-800">${result.simplified}</span>
+                <span class="text-lg text-purple-600">${result.pinyin}</span>
+                <div class="flex flex-wrap gap-1">${badgeHtml}</div>
             </div>
-            <div class="mt-3 text-gray-700">${result.definitions.slice(0, 2).join('; ')}</div>
-            ${result.hsk_level ? `<div class="mt-2 text-sm text-gray-500">HSK ${result.hsk_level}</div>` : ''}
+            <div class="mt-2 text-gray-700 text-sm leading-relaxed">${result.definitions.slice(0, 2).join('; ')}</div>
         `;
         card.onclick = () => selectWord(result);
         resultsList.appendChild(card);

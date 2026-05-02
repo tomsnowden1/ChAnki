@@ -186,9 +186,15 @@ class DictionaryService:
         length = func.length(DictionaryEntry.simplified)
         if not query:
             return (hsk, length)
+        q = query.lower()
         primary = case(
-            (DictionaryEntry.definitions.ilike(f'["{query.lower()}%'), 0),
-            else_=1
+            # Tier 0: first JSON item IS the query word — e.g. ["dog", "CL:..."]
+            # The `"` immediately after the query means it's a complete definition token,
+            # so 狗 ("dog") beats 狀 ("dog meat") even if both start with ["dog
+            (DictionaryEntry.definitions.ilike(f'["{q}"%'), 0),
+            # Tier 1: first definition starts with query as a prefix ("dog meat", "dog (dial.)")
+            (DictionaryEntry.definitions.ilike(f'["{q}%'), 1),
+            else_=2
         )
         return (primary, hsk, length)
 
