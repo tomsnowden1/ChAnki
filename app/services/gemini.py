@@ -277,14 +277,18 @@ Return ONLY a JSON array, no explanation:
         return valid
 
     def check_connection(self) -> bool:
-        """Check if Gemini API is configured and working"""
+        """
+        Check if Gemini API is configured and the key is valid.
+
+        Uses list_models() (a read-only metadata call) instead of
+        generate_content() so the health check never burns generation quota.
+        """
         if not self.model:
             return False
-        
+
         try:
-            # Simple test query
-            response = self.model.generate_content("Say 'OK'")
-            return bool(response.text)
+            models = list(genai.list_models())
+            return len(models) > 0
         except Exception as e:
             logger.error(f"Gemini connection test failed: {e}")
             return False

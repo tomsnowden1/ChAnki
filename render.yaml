@@ -11,6 +11,8 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: SYNC_SECRET
-        sync: false
+        sync: false         # Set in Render dashboard — never commit real value
+      - key: ENVIRONMENT
+        value: production
       - key: PYTHON_VERSION
         value: 3.9.18
