@@ -66,6 +66,21 @@ def queue_card(
     Rate-limited to 30 requests/minute per IP — slowapi requires a `request:
     Request` parameter so the decorator can extract the client address.
     """
+    # Duplicate guard: reject if this hanzi is already pending or has been synced.
+    # Prevents the same word being added multiple times from the PWA.
+    existing = db.query(CardQueue).filter(
+        CardQueue.hanzi == payload.hanzi,
+        CardQueue.status.in_(["pending", "synced"]),
+    ).first()
+    if existing:
+        pending_count = db.query(CardQueue).filter(CardQueue.status == "pending").count()
+        return {
+            "queued": False,
+            "already_queued": True,
+            "queue_position": pending_count,
+            "message": f"'{payload.hanzi}' is already in your queue.",
+        }
+
     db_settings = _get_settings(db)
     strict_mode = bool(db_settings.strict_mode) if db_settings else False
 
@@ -107,6 +122,22 @@ def queue_card(
         "queue_position": pending_count,
         "message": f"{cards_created} card(s) queued for sync",
     }
+
+
+@router.get("/check")
+def check_hanzi_queued(hanzi: str, db: Session = Depends(get_db_session)):
+    """
+    Public endpoint: check whether a hanzi is already in the queue.
+
+    Returns {"queued": true/false} so the frontend can immediately grey out
+    the "Add to Anki" button on word selection without waiting for the user
+    to click it.
+    """
+    exists = db.query(CardQueue).filter(
+        CardQueue.hanzi == hanzi,
+        CardQueue.status.in_(["pending", "synced"]),
+    ).first() is not None
+    return {"queued": exists}
 
 
 @router.get("/pending")

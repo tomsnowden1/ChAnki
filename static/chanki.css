@@ -993,6 +993,19 @@ input, select { font-family: var(--font-body); }
   margin-top: 2px;
 }
 
+/* API key test result message (replaces Tailwind inline classes) */
+.api-test-msg {
+  margin-top: var(--sp-2);
+  font-size: var(--text-sm);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+.api-test-msg--ok   { color: var(--success); }
+.api-test-msg--warn { color: var(--warning); }
+.api-test-msg--info { color: var(--fg-2); }
+.api-test-msg--err  { color: var(--error); }
+
 /* Gemini status row */
 .gemini-status-row {
   display: flex;

@@ -432,18 +432,35 @@ function selectWord(word) {
     document.getElementById('generatedContent').classList.add('hidden');
     generatedSentences = [];
 
-    // Reset Add to Anki button
+    // Reset Add to Anki button, then async-check if already queued
     const addBtn = document.getElementById('addToAnkiBtn');
     if (addBtn) {
         addBtn.disabled = false;
         addBtn.textContent = 'Add to Anki →';
     }
+    _checkAlreadyQueued(word.simplified);
 
     // Show seal divider + word card
     document.getElementById('sealDivider').classList.remove('hidden');
     const wordCard = document.getElementById('wordCard');
     wordCard.classList.remove('hidden');
     wordCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/** Silently check whether this hanzi is already queued and update the button. */
+async function _checkAlreadyQueued(hanzi) {
+    try {
+        const resp = await fetch(`/api/sync/check?hanzi=${encodeURIComponent(hanzi)}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.queued) {
+            const btn = document.getElementById('addToAnkiBtn');
+            if (btn && btn.textContent === 'Add to Anki →') {
+                btn.disabled = true;
+                btn.textContent = 'Already queued';
+            }
+        }
+    } catch { /* non-fatal */ }
 }
 
 async function startGenerating() {
@@ -669,7 +686,12 @@ async function addToAnkiDirect(sentence) {
 
         const data = await response.json();
 
-        if (data.queued) {
+        if (data.already_queued) {
+            showSuccess(`'${selectedWord.simplified}' is already in your queue.`);
+            btn.textContent = 'Already queued';
+            btn.disabled = true;
+            document.getElementById('generatedContent').classList.remove('hidden');
+        } else if (data.queued) {
             const n = data.cards_created || 1;
             showSuccess(`${n} card${n !== 1 ? 's' : ''} queued. Will sync to Anki when it is open.`);
             btn.textContent = `${n} card${n !== 1 ? 's' : ''} queued`;
@@ -783,7 +805,7 @@ async function testGeminiKey() {
     const apiKey = keyInput.value.trim();
 
     if (!apiKey) {
-        statusDiv.className = 'mt-2 text-sm text-yellow-600';
+        statusDiv.className = 'api-test-msg api-test-msg--warn';
         statusDiv.textContent = 'Please enter an API key first';
         statusDiv.classList.remove('hidden');
         return;
@@ -792,7 +814,7 @@ async function testGeminiKey() {
     // Update UI - testing state
     testBtn.disabled = true;
     testBtn.textContent = 'Testing...';
-    statusDiv.className = 'mt-2 text-sm text-gray-600';
+    statusDiv.className = 'api-test-msg api-test-msg--info';
     statusDiv.textContent = 'Connecting to Gemini API...';
     statusDiv.classList.remove('hidden');
 
@@ -806,22 +828,16 @@ async function testGeminiKey() {
         const result = await response.json();
 
         if (result.success) {
-            statusDiv.className = 'mt-2 text-sm text-green-600 font-semibold';
+            statusDiv.className = 'api-test-msg api-test-msg--ok';
             statusDiv.textContent = '✅ ' + result.message;
-
-            // Update status bar
-            const geminiStatus = document.getElementById('geminiStatus');
-            geminiStatus.className = 'w-3 h-3 rounded-full bg-green-500';
+            updateStatusDot('geminiStatus', true);
         } else {
-            statusDiv.className = 'mt-2 text-sm text-red-600 font-semibold';
+            statusDiv.className = 'api-test-msg api-test-msg--err';
             statusDiv.textContent = '❌ ' + result.message;
-
-            // Update status bar
-            const geminiStatus = document.getElementById('geminiStatus');
-            geminiStatus.className = 'w-3 h-3 rounded-full bg-red-500';
+            updateStatusDot('geminiStatus', false);
         }
     } catch (error) {
-        statusDiv.className = 'mt-2 text-sm text-red-600';
+        statusDiv.className = 'api-test-msg api-test-msg--err';
         statusDiv.textContent = '❌ Connection test failed: ' + error.message;
     } finally {
         testBtn.disabled = false;
