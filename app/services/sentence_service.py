@@ -1,4 +1,4 @@
-"""Hybrid sentence retrieval: Tatoeba primary, Gemini fallback (cached)."""
+"""Hybrid sentence retrieval: Tatoeba primary, OpenAI fallback (cached)."""
 import logging
 from typing import Dict, List
 
@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 class SentenceService:
     """Find example sentences for a Chinese word.
 
-    Prefers Tatoeba (offline, free). Falls back to Gemini and persists the
+    Prefers Tatoeba (offline, free). Falls back to OpenAI and persists the
     result so the same word never costs two API calls.
     """
 
-    def __init__(self, db: Session, gemini):
+    def __init__(self, db: Session, ai):
         self.db = db
-        self.gemini = gemini
+        self.ai = ai
 
     def find_sentences(
         self,
@@ -33,9 +33,9 @@ class SentenceService:
         """Return up to `count` sentence dicts: {hanzi, pinyin, english, source}."""
         results = self._tatoeba_lookup(hanzi, hsk_level, count)
 
-        if len(results) < count and self.gemini is not None:
+        if len(results) < count and self.ai is not None:
             needed = count - len(results)
-            results.extend(self._fallback_to_gemini(
+            results.extend(self._fallback_to_ai(
                 hanzi, pinyin, definition, hsk_level, needed
             ))
 
@@ -49,12 +49,12 @@ class SentenceService:
         hsk_level: int = 3,
         count: int = 3,
     ) -> List[Dict[str, str]]:
-        """Async variant — Tatoeba is sync SQL, only the Gemini fallback awaits."""
+        """Async variant — Tatoeba is sync SQL, only the OpenAI fallback awaits."""
         results = self._tatoeba_lookup(hanzi, hsk_level, count)
 
-        if len(results) < count and self.gemini is not None:
+        if len(results) < count and self.ai is not None:
             needed = count - len(results)
-            results.extend(await self._fallback_to_gemini_async(
+            results.extend(await self._fallback_to_ai_async(
                 hanzi, pinyin, definition, hsk_level, needed
             ))
 
@@ -116,34 +116,34 @@ class SentenceService:
                     picked.append(b.pop(0))
         return picked
 
-    def _fallback_to_gemini(
+    def _fallback_to_ai(
         self, hanzi: str, pinyin: str, definition: str, hsk_level: int, needed: int
     ) -> List[Sentence]:
-        """Sync path — call Gemini, persist, return."""
+        """Sync path — call OpenAI, persist, return."""
         try:
-            raw = self.gemini.generate_sentences(hanzi, pinyin, definition, hsk_level)
+            raw = self.ai.generate_sentences(hanzi, pinyin, definition, hsk_level)
         except Exception as e:
-            logger.error(f"Gemini fallback failed for '{hanzi}': {e}")
+            logger.error(f"AI fallback failed for '{hanzi}': {e}")
             return []
-        return self._persist_gemini_results(hanzi, hsk_level, raw, needed)
+        return self._persist_ai_results(hanzi, hsk_level, raw, needed)
 
-    async def _fallback_to_gemini_async(
+    async def _fallback_to_ai_async(
         self, hanzi: str, pinyin: str, definition: str, hsk_level: int, needed: int
     ) -> List[Sentence]:
         """Async path — same logic, but doesn't block the FastAPI worker."""
         try:
-            raw = await self.gemini.generate_sentences_async(
+            raw = await self.ai.generate_sentences_async(
                 hanzi, pinyin, definition, hsk_level
             )
         except Exception as e:
-            logger.error(f"Gemini async fallback failed for '{hanzi}': {e}")
+            logger.error(f"AI async fallback failed for '{hanzi}': {e}")
             return []
-        return self._persist_gemini_results(hanzi, hsk_level, raw, needed)
+        return self._persist_ai_results(hanzi, hsk_level, raw, needed)
 
-    def _persist_gemini_results(
+    def _persist_ai_results(
         self, hanzi: str, hsk_level: int, raw, needed: int
     ) -> List[Sentence]:
-        """Validate Gemini output, persist into Sentence/SentenceWord, return rows."""
+        """Validate AI output, persist into Sentence/SentenceWord, return rows."""
         valid = [s for s in raw if isinstance(s, dict) and "hanzi" in s and "english" in s]
         if not valid:
             return []
@@ -158,7 +158,7 @@ class SentenceService:
                 hanzi=sentence_hanzi,
                 pinyin=sentence_pinyin,
                 english=s["english"],
-                source="gemini",
+                source="ai",
                 hsk_score=hsk_level,
                 char_length=len(sentence_hanzi),
                 tatoeba_id=None,

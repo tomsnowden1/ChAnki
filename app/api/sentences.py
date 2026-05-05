@@ -1,14 +1,14 @@
 """
 API endpoint to generate 3 sentences for preview (before adding to Anki).
 
-Tatoeba is the primary source; Gemini is the fallback when Tatoeba lacks
+Tatoeba is the primary source; OpenAI is the fallback when Tatoeba lacks
 enough hits for the queried word.
 """
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.session import get_db_session
-from app.services.service_cache import get_gemini, get_settings, get_sentence_service
+from app.services.service_cache import get_ai, get_settings, get_sentence_service
 from app.config import settings as env_settings
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -39,15 +39,15 @@ async def generate_sentences(
     request: GenerateSentencesRequest,
     db: Session = Depends(get_db_session)
 ):
-    """Generate 3 example sentences. Tries Tatoeba first, then Gemini."""
+    """Generate 3 example sentences. Tries Tatoeba first, then OpenAI."""
     try:
         settings = get_settings(db)
-        gemini = None
-        api_key = (settings.gemini_api_key if settings else "") or env_settings.gemini_api_key
+        ai = None
+        api_key = (settings.openai_api_key if settings else "") or env_settings.openai_api_key
         if api_key:
-            gemini = get_gemini(api_key)
+            ai = get_ai(api_key)
 
-        service = get_sentence_service(db, gemini)
+        service = get_sentence_service(db, ai)
         sentences = await service.find_sentences_async(
             request.hanzi,
             request.pinyin,
@@ -60,9 +60,9 @@ async def generate_sentences(
                 success=False,
                 sentences=[],
                 message=(
-                    "No Tatoeba match and no Gemini key configured. "
-                    "Add a Gemini key in Settings to enable AI fallback."
-                    if gemini is None
+                    "No Tatoeba match and no OpenAI key configured. "
+                    "Add an OpenAI key in Settings to enable AI fallback."
+                    if ai is None
                     else "No sentences found."
                 ),
             )
@@ -89,8 +89,8 @@ async def generate_sentences_stream(
     Server-sent events stream of example sentences.
 
     Each sentence is emitted as a `data: {...}` event the moment it's ready
-    — Tatoeba hits first (instant), then any Gemini fallback streams in as
-    Gemini emits each line of NDJSON. First sentence in <1s instead of
+    — Tatoeba hits first (instant), then any OpenAI fallback streams in as
+    the model emits each line of NDJSON. First sentence in <1s instead of
     waiting 2-3s for the full batch.
 
     SSE protocol:
@@ -103,10 +103,10 @@ async def generate_sentences_stream(
     EventSource's only mode; the older POST endpoint stays for fallback.
     """
     settings_row = get_settings(db)
-    api_key = (settings_row.gemini_api_key if settings_row else "") or env_settings.gemini_api_key
-    gemini = get_gemini(api_key) if api_key else None
+    api_key = (settings_row.openai_api_key if settings_row else "") or env_settings.openai_api_key
+    ai = get_ai(api_key) if api_key else None
 
-    service = get_sentence_service(db, gemini)
+    service = get_sentence_service(db, ai)
     target_count = 3
 
     async def event_stream():
@@ -116,32 +116,32 @@ async def generate_sentences_stream(
             payload = service._row_to_dict(r)
             yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-        # 2. Gemini fallback streams in for any remaining slots
-        emitted_from_gemini = []
+        # 2. OpenAI fallback streams in for any remaining slots
+        emitted_from_ai = []
         needed = target_count - len(tatoeba_rows)
-        if needed > 0 and gemini is not None:
+        if needed > 0 and ai is not None:
             sent = 0
-            async for s in gemini.generate_sentences_stream(hanzi, pinyin, definition, hsk_level):
+            async for s in ai.generate_sentences_stream(hanzi, pinyin, definition, hsk_level):
                 if "error" in s:
                     yield f"event: error\ndata: {json.dumps(s, ensure_ascii=False)}\n\n"
                     break
-                payload = {**s, "source": "gemini"}
+                payload = {**s, "source": "ai"}
                 yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                emitted_from_gemini.append(s)
+                emitted_from_ai.append(s)
                 sent += 1
                 if sent >= needed:
                     break
 
-            # 3. Persist Gemini sentences for future cache hits.
+            # 3. Persist AI sentences for future cache hits.
             # Done after streaming so the user sees results immediately;
             # the DB write is fire-and-forget from the client's perspective.
-            if emitted_from_gemini:
+            if emitted_from_ai:
                 try:
-                    service._persist_gemini_results(
-                        hanzi, hsk_level, emitted_from_gemini, len(emitted_from_gemini)
+                    service._persist_ai_results(
+                        hanzi, hsk_level, emitted_from_ai, len(emitted_from_ai)
                     )
                 except Exception as e:
-                    logger.warning(f"Persisting streamed Gemini sentences failed: {e}")
+                    logger.warning(f"Persisting streamed AI sentences failed: {e}")
 
         # 4. Closing event so the client can call EventSource.close()
         yield "event: done\ndata: {}\n\n"

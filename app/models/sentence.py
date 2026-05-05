@@ -1,11 +1,11 @@
-"""SQLAlchemy models for Tatoeba/Gemini example sentences"""
+"""SQLAlchemy models for Tatoeba/AI example sentences"""
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index
 from app.models.settings import Base
 from datetime import datetime
 
 
 class Sentence(Base):
-    """Example sentence (from Tatoeba or Gemini cache)"""
+    """Example sentence (from Tatoeba or AI cache)"""
     __tablename__ = "sentences"
 
     id = Column(Integer, primary_key=True, index=True)

@@ -1,4 +1,4 @@
-"""AI fallback cache — persists Gemini-defined words so each query costs one API call"""
+"""AI fallback cache — persists AI-defined words so each query costs one API call"""
 from sqlalchemy import Column, Integer, String, DateTime
 from app.models.settings import Base
 from datetime import datetime

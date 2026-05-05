@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     # Database
     database_url: str = Field(default="sqlite:///./chanki.db", env="DATABASE_URL")
 
-    # Gemini API
-    gemini_api_key: str = Field(default="", env="GEMINI_API_KEY")
+    # OpenAI API
+    openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
 
     # AnkiConnect
     anki_connect_url: str = Field(default="http://localhost:8765", env="ANKI_CONNECT_URL")

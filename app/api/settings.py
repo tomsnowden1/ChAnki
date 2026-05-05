@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 from app.models.settings import AppSettings
 from app.schemas.settings import SettingsUpdate, SettingsResponse
-from app.services.service_cache import invalidate_settings, invalidate_gemini
+from app.services.service_cache import invalidate_settings, invalidate_ai
 from pydantic import BaseModel
 from typing import Optional
 import logging
@@ -18,14 +18,14 @@ router = APIRouter(prefix="/api", tags=["settings"])
 async def get_settings(db: Session = Depends(get_db_session)):
     """Get current application settings"""
     settings = db.query(AppSettings).first()
-    
+
     if not settings:
         # Create default settings if they don't exist
         settings = AppSettings()
         db.add(settings)
         db.commit()
         db.refresh(settings)
-    
+
     return SettingsResponse(**settings.to_dict())
 
 
@@ -36,86 +36,91 @@ async def update_settings(
 ):
     """Update application settings"""
     settings = db.query(AppSettings).first()
-    
+
     if not settings:
         settings = AppSettings()
         db.add(settings)
-    
+
     update_data = settings_update.model_dump(exclude_unset=True)
     # Never overwrite the real key with the masked sentinel
     from app.models.settings import AppSettings as _AS
-    if update_data.get('gemini_api_key') == _AS.KEY_SET_SENTINEL:
-        update_data.pop('gemini_api_key')
+    if update_data.get('openai_api_key') == _AS.KEY_SET_SENTINEL:
+        update_data.pop('openai_api_key')
     for field, value in update_data.items():
         setattr(settings, field, value)
-    
+
     db.commit()
     db.refresh(settings)
 
     invalidate_settings()
-    if settings_update.gemini_api_key is not None:
-        invalidate_gemini()
+    if settings_update.openai_api_key is not None:
+        invalidate_ai()
 
     return SettingsResponse(**settings.to_dict())
 
 
-class GeminiTestRequest(BaseModel):
-    """Request for testing Gemini API key"""
+class OpenAITestRequest(BaseModel):
+    """Request for testing OpenAI API key"""
     api_key: str
 
 
-class GeminiTestResponse(BaseModel):
-    """Response from Gemini API key test"""
+class OpenAITestResponse(BaseModel):
+    """Response from OpenAI API key test"""
     success: bool
     message: str
     model_name: Optional[str] = None
 
 
-@router.post("/settings/test-gemini", response_model=GeminiTestResponse)
-async def test_gemini_connection(request: GeminiTestRequest):
+@router.post("/settings/test-openai", response_model=OpenAITestResponse)
+async def test_openai_connection(request: OpenAITestRequest):
     """
-    Test Gemini API key validity
-    
-    Attempts to list models to verify the key works
+    Test OpenAI API key validity.
+
+    Calls models.list() — read-only metadata, no token cost — so this
+    endpoint never burns generation quota.
     """
-    import google.generativeai as genai
-    
+    from openai import OpenAI
+
     if not request.api_key:
-        return GeminiTestResponse(
+        return OpenAITestResponse(
             success=False,
             message="No API key provided"
         )
-    
+
     try:
-        # Configure with provided key
-        genai.configure(api_key=request.api_key)
-        
-        # Try to list models as a validation test
-        models = list(genai.list_models())
-        model_names = [m.name for m in models if 'gemini' in m.name.lower()]
-        
-        if model_names:
-            return GeminiTestResponse(
+        client = OpenAI(api_key=request.api_key)
+        models = list(client.models.list())
+
+        # Confirm gpt-4o-mini (or the pinned MODEL) is reachable on this key
+        from app.services.ai import MODEL
+        ids = {m.id for m in models}
+        if MODEL in ids:
+            return OpenAITestResponse(
                 success=True,
-                message="✅ Connected to Gemini Flash!",
-                model_name="gemini-1.5-flash"
+                message=f"✅ Connected to OpenAI ({MODEL})",
+                model_name=MODEL,
             )
-        else:
-            return GeminiTestResponse(
-                success=False,
-                message="No Gemini models available for this key"
-            )
-            
+        # Key is valid but our pinned model isn't accessible — surface that
+        return OpenAITestResponse(
+            success=True,
+            message=f"✅ Connected, but {MODEL} not in your model list ({len(ids)} models available)",
+            model_name=None,
+        )
+
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"Gemini test failed: {error_msg}")
-        if "API_KEY_INVALID" in error_msg or "invalid" in error_msg.lower():
-            return GeminiTestResponse(
+        logger.error(f"OpenAI test failed: {error_msg}")
+        if "incorrect api key" in error_msg.lower() or "invalid_api_key" in error_msg.lower():
+            return OpenAITestResponse(
                 success=False,
-                message="❌ Invalid API Key. Please check your Google AI Studio settings."
+                message="❌ Invalid API key. Get one at platform.openai.com/api-keys."
             )
-        else:
-            return GeminiTestResponse(
+        if "rate_limit" in error_msg.lower():
+            return OpenAITestResponse(
                 success=False,
-                message=f"Connection failed: {error_msg}"
+                message="❌ Rate limited. Try again in a moment."
             )
+        return OpenAITestResponse(
+            success=False,
+            message=f"Connection failed: {error_msg}"
+        )

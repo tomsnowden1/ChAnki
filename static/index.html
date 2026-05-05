@@ -44,8 +44,8 @@
       <span>Dictionary</span>
     </div>
     <div class="status-item">
-      <span id="geminiStatus" class="status-dot"></span>
-      <span>Gemini</span>
+      <span id="aiStatus" class="status-dot"></span>
+      <span>OpenAI</span>
     </div>
     <div class="status-item status-item--clickable" id="ankiStatusWrapper" role="button"
          aria-haspopup="true" aria-expanded="false">
@@ -129,7 +129,7 @@
 
     <!-- Generation progress (hairline bar, no spinner) -->
     <div id="generationProgress" class="generation-progress hidden">
-      <p id="progressText" class="progress-label">Generating 3 sentences with Gemini…</p>
+      <p id="progressText" class="progress-label">Generating 3 sentences…</p>
       <div class="progress-track">
         <div class="progress-bar"></div>
       </div>
@@ -197,12 +197,26 @@
         <input type="text" id="modelName" class="form-input">
       </div>
 
-      <!-- Gemini status -->
-      <div class="gemini-status-row">
-        <span id="geminiSettingsDot" class="status-dot" style="flex-shrink:0;"></span>
-        <span style="font-weight:600;font-size:14px;">Gemini AI</span>
-        <span id="geminiSettingsLabel" style="color:var(--fg-3);font-size:13px;margin-left:4px;">checking…</span>
-        <div id="geminiTestStatus" class="hidden"></div>
+      <!-- OpenAI key + status -->
+      <div class="form-field">
+        <label class="form-label" for="openaiKey">OpenAI API key</label>
+        <div class="form-row">
+          <input type="password" id="openaiKey" class="form-input"
+                 placeholder="sk-…" autocomplete="off" spellcheck="false"
+                 style="flex:1;">
+          <button type="button" id="testOpenaiBtn" class="btn btn--secondary"
+                  onclick="testOpenaiKey()">Test</button>
+        </div>
+        <div class="ai-status-row" style="margin-top:8px;">
+          <span id="aiSettingsDot" class="status-dot" style="flex-shrink:0;"></span>
+          <span style="font-weight:600;font-size:14px;">OpenAI</span>
+          <span id="aiSettingsLabel" style="color:var(--fg-3);font-size:13px;margin-left:4px;">checking…</span>
+        </div>
+        <div id="aiTestStatus" class="hidden"></div>
+        <p class="form-check__desc">
+          Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
+          Pinned model: gpt-4o-mini (~$0.0002 per sentence batch).
+        </p>
       </div>
 
       <!-- Target HSK level -->

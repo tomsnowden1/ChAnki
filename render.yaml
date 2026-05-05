@@ -8,7 +8,7 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-      - key: GEMINI_API_KEY
+      - key: OPENAI_API_KEY
         sync: false
       - key: SYNC_SECRET
         sync: false         # Set in Render dashboard — never commit real value

@@ -126,17 +126,17 @@ function setupEventListeners() {
 
 // Check health status and update UI indicators
 async function checkStatus() {
-    // Server health (dictionary, gemini)
+    // Server health (dictionary, OpenAI)
     try {
         const response = await fetch('/api/health');
         const data = await response.json();
-        const geminiOk = data.components.gemini?.status === 'healthy';
+        const aiOk = data.components.ai?.status === 'healthy';
         updateStatusDot('dictStatus', data.components.database?.status === 'healthy');
-        updateStatusDot('geminiStatus', geminiOk);
-        updateGeminiSettingsPanel(geminiOk);
+        updateStatusDot('aiStatus', aiOk);
+        updateAISettingsPanel(aiOk);
     } catch {
         updateStatusDot('dictStatus', false);
-        updateStatusDot('geminiStatus', false);
+        updateStatusDot('aiStatus', false);
     }
 
     // Anki: check localhost:8765 directly from the browser
@@ -205,9 +205,9 @@ function updateAnkiPanels(isConnected) {
     }
 }
 
-function updateGeminiSettingsPanel(isOk) {
-    const dot = document.getElementById('geminiSettingsDot');
-    const label = document.getElementById('geminiSettingsLabel');
+function updateAISettingsPanel(isOk) {
+    const dot = document.getElementById('aiSettingsDot');
+    const label = document.getElementById('aiSettingsLabel');
     if (dot) dot.style.background = isOk ? 'var(--success)' : 'var(--ink-4)';
     if (label) {
         label.textContent = isOk ? 'active' : 'not configured';
@@ -268,8 +268,8 @@ async function loadSettings() {
         const check = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
 
         // Show placeholder if key is configured, never display the real value
-        const keyEl = document.getElementById('geminiKey');
-        if (keyEl) keyEl.placeholder = settings.gemini_api_key ? 'API key configured' : 'Enter your Gemini API key';
+        const keyEl = document.getElementById('openaiKey');
+        if (keyEl) keyEl.placeholder = settings.openai_api_key ? 'API key configured' : 'sk-…';
         set('deckName', settings.anki_deck_name);
         set('modelName', settings.anki_model_name);
         set('hskLevel', settings.hsk_target_level);
@@ -289,10 +289,10 @@ async function saveSettings(event) {
     const get = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
     const getCheck = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
 
-    const typedKey = get('geminiKey');
+    const typedKey = get('openaiKey');
     const payload = {
         // Only send the key if the user actually typed a new value
-        ...(typedKey ? { gemini_api_key: typedKey } : {}),
+        ...(typedKey ? { openai_api_key: typedKey } : {}),
         anki_deck_name: get('deckName'),
         anki_model_name: get('modelName'),
         hsk_target_level: parseInt(get('hskLevel')) || 3,
@@ -466,7 +466,7 @@ async function _checkAlreadyQueued(hanzi) {
 async function startGenerating() {
     document.getElementById('generatePrompt').classList.add('hidden');
     document.getElementById('generationProgress').classList.remove('hidden');
-    document.getElementById('progressText').textContent = 'Generating 3 sentences with Gemini…';
+    document.getElementById('progressText').textContent = 'Generating 3 sentences…';
     await generateSentencesForCard();
 }
 
@@ -477,7 +477,7 @@ let _activeEventSource = null;  // close any prior stream when starting a new on
 async function generateSentencesForCard() {
     if (!selectedWord) return;
 
-    // Prefer SSE streaming so each sentence appears as soon as Gemini emits it.
+    // Prefer SSE streaming so each sentence appears as soon as the model emits it.
     // Fall back to the POST endpoint if EventSource isn't supported.
     if (typeof EventSource !== 'undefined') {
         return generateSentencesViaSSE();
@@ -526,7 +526,7 @@ async function generateSentencesViaSSE() {
         _activeEventSource = null;
         if (!gotAny) {
             document.getElementById('progressText').textContent =
-                'No sentences found. Add a Gemini key in Settings to enable AI fallback.';
+                'No sentences found. Add an OpenAI key in Settings to enable AI fallback.';
         }
     });
 
@@ -796,11 +796,11 @@ async function speakChinese(text) {
     }
 }
 
-// Test Gemini API Key
-async function testGeminiKey() {
-    const keyInput = document.getElementById('geminiKey');
-    const testBtn = document.getElementById('testGeminiBtn');
-    const statusDiv = document.getElementById('geminiTestStatus');
+// Test OpenAI API Key
+async function testOpenaiKey() {
+    const keyInput = document.getElementById('openaiKey');
+    const testBtn = document.getElementById('testOpenaiBtn');
+    const statusDiv = document.getElementById('aiTestStatus');
 
     const apiKey = keyInput.value.trim();
 
@@ -815,11 +815,11 @@ async function testGeminiKey() {
     testBtn.disabled = true;
     testBtn.textContent = 'Testing...';
     statusDiv.className = 'api-test-msg api-test-msg--info';
-    statusDiv.textContent = 'Connecting to Gemini API...';
+    statusDiv.textContent = 'Connecting to OpenAI…';
     statusDiv.classList.remove('hidden');
 
     try {
-        const response = await fetch('/api/settings/test-gemini', {
+        const response = await fetch('/api/settings/test-openai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ api_key: apiKey })
@@ -829,12 +829,12 @@ async function testGeminiKey() {
 
         if (result.success) {
             statusDiv.className = 'api-test-msg api-test-msg--ok';
-            statusDiv.textContent = '✅ ' + result.message;
-            updateStatusDot('geminiStatus', true);
+            statusDiv.textContent = result.message;
+            updateStatusDot('aiStatus', true);
         } else {
             statusDiv.className = 'api-test-msg api-test-msg--err';
-            statusDiv.textContent = '❌ ' + result.message;
-            updateStatusDot('geminiStatus', false);
+            statusDiv.textContent = result.message;
+            updateStatusDot('aiStatus', false);
         }
     } catch (error) {
         statusDiv.className = 'api-test-msg api-test-msg--err';

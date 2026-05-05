@@ -83,7 +83,7 @@ class DictionaryService:
         # Last resort: partial pinyin LIKE (catches e.g. "mao" matching "mao2ze2dong1")
         return self._search_pinyin_like(plain, limit)
 
-    def search_with_ai_fallback(self, query: str, gemini_service, limit: int = 20) -> Tuple[List[DictionaryEntry], bool]:
+    def search_with_ai_fallback(self, query: str, ai_service, limit: int = 20) -> Tuple[List[DictionaryEntry], bool]:
         """Search with AI fallback; returns (results, is_ai_generated)."""
         results = self.search(query, limit)
         if results:
@@ -95,12 +95,12 @@ class DictionaryService:
             entry = self._ai_cache_to_entry(cached)
             return [entry], True
 
-        # Call Gemini
-        if not gemini_service or not getattr(gemini_service, 'model', None):
+        # Call OpenAI
+        if not ai_service or not getattr(ai_service, 'client', None):
             return [], False
 
         try:
-            ai_result = gemini_service.define_word(query)
+            ai_result = ai_service.define_word(query)
             if ai_result and ai_result.get('hanzi'):
                 # Persist to cache
                 cache_row = AICache(

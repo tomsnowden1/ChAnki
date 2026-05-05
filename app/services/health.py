@@ -25,7 +25,7 @@ class ComponentHealth:
 class HealthService:
     """
     Centralized health monitoring with caching
-    Checks: Database, AnkiConnect, Gemini AI
+    Checks: Database, AnkiConnect, OpenAI
     """
     
     def __init__(self, cache_ttl: int = 10):
@@ -40,21 +40,21 @@ class HealthService:
     def get_system_health(self, force_refresh: bool = False) -> Dict[str, dict]:
         """
         Get health status of all components
-        
+
         Returns:
             Dictionary with health status for each component
         """
         now = datetime.now()
-        
+
         # Check if cache is still valid
         if not force_refresh and self._last_full_check:
             if (now - self._last_full_check) < timedelta(seconds=self.cache_ttl):
                 return self._cache_to_dict()
-        
+
         # Perform fresh health checks
         self._check_database()
         self._check_anki()
-        self._check_gemini()
+        self._check_ai()
         
         self._last_full_check = now
         return self._cache_to_dict()
@@ -137,61 +137,61 @@ class HealthService:
                 last_check=datetime.now()
             )
     
-    def _check_gemini(self):
-        """Check Gemini AI health"""
+    def _check_ai(self):
+        """Check OpenAI health"""
         start = time.time()
-        
+
         try:
-            from app.services.gemini import GeminiService
+            from app.services.ai import AIService
             from app.config import settings
             from sqlalchemy.orm import Session
             from app.db.session import get_db_session
             from app.models.settings import AppSettings
-            
-            # Get API key from settings
+
+            # Get API key from settings (DB takes precedence over env var)
             db = next(get_db_session())
             app_settings = db.query(AppSettings).first()
-            
+
             api_key = None
-            if app_settings and app_settings.gemini_api_key:
-                api_key = app_settings.gemini_api_key
-            elif settings.gemini_api_key:
-                api_key = settings.gemini_api_key
-            
+            if app_settings and app_settings.openai_api_key:
+                api_key = app_settings.openai_api_key
+            elif settings.openai_api_key:
+                api_key = settings.openai_api_key
+
             db.close()
-            
+
             if not api_key:
-                self._cache['gemini'] = ComponentHealth(
-                    name="Gemini AI",
+                self._cache['ai'] = ComponentHealth(
+                    name="OpenAI",
                     status="down",
                     message="API key not configured",
                     last_check=datetime.now()
                 )
                 return
-            
-            # Test connection
-            gemini = GeminiService(api_key)
-            if gemini.check_connection():
+
+            # Test connection (read-only models.list call — no token cost)
+            ai = AIService(api_key)
+            if ai.check_connection():
                 latency = (time.time() - start) * 1000
-                
-                self._cache['gemini'] = ComponentHealth(
-                    name="Gemini AI",
+
+                self._cache['ai'] = ComponentHealth(
+                    name="OpenAI",
                     status="healthy",
                     message="API connected",
                     last_check=datetime.now(),
                     latency_ms=latency
                 )
             else:
-                self._cache['gemini'] = ComponentHealth(
-                    name="Gemini AI",
+                self._cache['ai'] = ComponentHealth(
+                    name="OpenAI",
                     status="down",
                     message="API key invalid or quota exceeded",
                     last_check=datetime.now()
                 )
-        
+
         except Exception as e:
-            self._cache['gemini'] = ComponentHealth(
-                name="Gemini AI",
+            self._cache['ai'] = ComponentHealth(
+                name="OpenAI",
                 status="down",
                 message=f"Error: {str(e)}",
                 last_check=datetime.now()

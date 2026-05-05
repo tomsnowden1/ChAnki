@@ -49,6 +49,9 @@ def _run_migrations_sqlite():
         "ALTER TABLE settings ADD COLUMN strict_mode BOOLEAN DEFAULT 0",
         "ALTER TABLE card_queue ADD COLUMN card_type TEXT",
         "ALTER TABLE card_queue ADD COLUMN hint TEXT",
+        # OpenAI migration: add new column. SQLite can't drop columns easily,
+        # so the legacy `gemini_api_key` column (if present) stays orphaned.
+        "ALTER TABLE settings ADD COLUMN openai_api_key TEXT",
     ]
     with get_db() as db:
         for stmt in stmts:
@@ -65,6 +68,10 @@ def _run_migrations_postgres():
         "ALTER TABLE settings   ADD COLUMN IF NOT EXISTS strict_mode BOOLEAN DEFAULT FALSE",
         "ALTER TABLE card_queue ADD COLUMN IF NOT EXISTS card_type   VARCHAR",
         "ALTER TABLE card_queue ADD COLUMN IF NOT EXISTS hint        VARCHAR",
+        # OpenAI migration: add new key column, drop the legacy Gemini one.
+        # Both IF [NOT] EXISTS so this is idempotent across redeploys.
+        "ALTER TABLE settings ADD  COLUMN IF NOT EXISTS openai_api_key VARCHAR",
+        "ALTER TABLE settings DROP COLUMN IF EXISTS gemini_api_key",
         # Composite index for the polling query (WHERE status='pending' ORDER BY created_at)
         "CREATE INDEX IF NOT EXISTS ix_card_queue_status_created ON card_queue (status, created_at)",
         # Generated tsvector column + GIN index for English full-text search.

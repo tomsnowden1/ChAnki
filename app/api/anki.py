@@ -5,7 +5,7 @@ from app.db.session import get_db_session
 from app.models.settings import AppSettings
 from app.services.anki import AnkiService, AnkiConnectError
 from app.services.audio import AudioService
-from app.services.service_cache import get_gemini
+from app.services.service_cache import get_ai
 from app.schemas.anki import AddToAnkiRequest, AddToAnkiResponse, AnkiStatusResponse
 from app.config import settings as app_settings
 import logging
@@ -71,7 +71,7 @@ async def add_to_anki(
     
     Process:
     1. Check for duplicates
-    2. Generate example sentence (Gemini)
+    2. Generate example sentence (OpenAI)
     3. Generate audio (edge-tts)
     4. Create note type if needed
     5. Add note to Anki
@@ -83,7 +83,7 @@ async def add_to_anki(
     
     # Initialize services
     anki = AnkiService(app_settings.anki_connect_url)
-    gemini = get_gemini(settings.gemini_api_key or app_settings.gemini_api_key)
+    ai = get_ai(settings.openai_api_key or app_settings.openai_api_key)
     audio = AudioService()
     
     try:
@@ -96,7 +96,7 @@ async def add_to_anki(
             
             # Generate sentence for queue (still need it for the card)
             try:
-                sentences = gemini.generate_sentences(
+                sentences = ai.generate_sentences(
                     request.hanzi,
                     request.pinyin,
                     request.definition,
@@ -152,7 +152,7 @@ async def add_to_anki(
         
         # Step 4: Generate 3 sentences
         logger.info(f"Generating 3 sentences for {request.hanzi}")
-        sentences = gemini.generate_sentences(
+        sentences = ai.generate_sentences(
             request.hanzi,
             request.pinyin,
             request.definition,

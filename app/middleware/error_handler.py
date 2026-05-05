@@ -62,11 +62,12 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 "The database may be corrupt. Try `POST /api/db/seed` to rebuild it."
             )
         
-        # Gemini API errors
-        if "gemini" in error_str.lower() or "api_key" in error_str.lower():
+        # OpenAI API errors
+        s = error_str.lower()
+        if "openai" in s or "api_key" in s or "rate_limit" in s or "invalid_api_key" in s:
             return (
                 "AI service unavailable",
-                "Check your Gemini API key in Settings and ensure it is valid."
+                "Check your OpenAI API key in Settings and ensure it is valid."
             )
         
         # AnkiConnect errors

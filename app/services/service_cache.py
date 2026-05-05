@@ -1,8 +1,8 @@
 """
 Module-level singletons for services that are expensive to construct.
 
-GeminiService: recreated only when the API key changes.
-AppSettings:   cached with a 30s TTL; invalidated immediately on PUT /settings.
+AIService:    recreated only when the API key changes.
+AppSettings:  cached with a 30s TTL; invalidated immediately on PUT /settings.
 """
 import time
 from threading import Lock
@@ -10,27 +10,27 @@ from typing import Optional
 
 _lock = Lock()
 
-# --- Gemini ---
-_gemini = None
-_gemini_key: str = ''
+# --- AI (OpenAI) ---
+_ai = None
+_ai_key: str = ''
 
 
-def get_gemini(api_key: str):
-    """Return a cached GeminiService, rebuilding only when the key changes."""
-    global _gemini, _gemini_key
+def get_ai(api_key: str):
+    """Return a cached AIService, rebuilding only when the key changes."""
+    global _ai, _ai_key
     with _lock:
-        if _gemini is None or api_key != _gemini_key:
-            from app.services.gemini import GeminiService
-            _gemini = GeminiService(api_key)
-            _gemini_key = api_key
-        return _gemini
+        if _ai is None or api_key != _ai_key:
+            from app.services.ai import AIService
+            _ai = AIService(api_key)
+            _ai_key = api_key
+        return _ai
 
 
-def invalidate_gemini():
-    global _gemini, _gemini_key
+def invalidate_ai():
+    global _ai, _ai_key
     with _lock:
-        _gemini = None
-        _gemini_key = ''
+        _ai = None
+        _ai_key = ''
 
 
 # --- AppSettings ---
@@ -73,11 +73,11 @@ def invalidate_settings():
 
 
 # --- SentenceService ---
-def get_sentence_service(db, gemini=None):
+def get_sentence_service(db, ai=None):
     """Factory for SentenceService.
 
     A fresh instance is built per request because the SQLAlchemy session is
-    request-scoped. The injected GeminiService is itself cached above.
+    request-scoped. The injected AIService is itself cached above.
     """
     from app.services.sentence_service import SentenceService
-    return SentenceService(db, gemini)
+    return SentenceService(db, ai)

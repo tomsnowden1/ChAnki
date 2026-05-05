@@ -1006,8 +1006,8 @@ input, select { font-family: var(--font-body); }
 .api-test-msg--info { color: var(--fg-2); }
 .api-test-msg--err  { color: var(--error); }
 
-/* Gemini status row */
-.gemini-status-row {
+/* AI provider status row */
+.ai-status-row {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
