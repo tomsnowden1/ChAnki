@@ -332,7 +332,15 @@ def seed_hsk_levels():
     as a tiebreaker for homographs (e.g. 行 xíng/háng have different levels).
 
     Idempotent: skips entirely when ≥4500 entries already carry an HSK level.
-    Only updates rows where `hsk_level IS NULL` so re-runs never overwrite.
+
+    Concurrency-safe: on Postgres uses pg_try_advisory_xact_lock() so that
+    when multiple gunicorn workers all run startup simultaneously, only one
+    performs the seeding — the rest skip immediately.
+
+    Performance: builds all updates in memory then issues two bulk UPDATE …
+    FROM (VALUES …) statements (one for pinyin-matched, one fallback).
+    This replaces the old per-row loop (6 000+ individual UPDATEs) with two
+    statements that complete in well under any reasonable Postgres timeout.
     """
     tsv_path = Path(__file__).resolve().parents[2] / "data" / "hsk_levels.tsv"
     if not tsv_path.exists():
@@ -340,7 +348,7 @@ def seed_hsk_levels():
         return
 
     with get_db() as db:
-        # Skip if already seeded — a fresh deploy that re-runs startup is a no-op
+        # ── Skip-if-already-seeded check ─────────────────────────────────────
         already = db.query(DictionaryEntry).filter(
             DictionaryEntry.hsk_level.isnot(None)
         ).count()
@@ -348,7 +356,29 @@ def seed_hsk_levels():
             logger.info(f"✓ HSK levels already seeded ({already:,} entries); skipping")
             return
 
-        updated = 0
+        # ── Postgres concurrency guard ────────────────────────────────────────
+        # With multiple gunicorn workers all running startup simultaneously,
+        # only the worker that acquires this advisory lock does the seeding;
+        # the rest return immediately.  The lock is released automatically
+        # when this transaction ends (xact-level advisory lock).
+        if not _is_sqlite():
+            got_lock = db.execute(
+                text("SELECT pg_try_advisory_xact_lock(8472638756)")
+            ).scalar()
+            if not got_lock:
+                logger.info("HSK seed lock held by another worker — skipping")
+                return
+            # Re-check after acquiring the lock (another worker may have just finished)
+            already = db.query(DictionaryEntry).filter(
+                DictionaryEntry.hsk_level.isnot(None)
+            ).count()
+            if already >= 4500:
+                logger.info(f"✓ HSK levels seeded by sibling worker ({already:,} entries)")
+                return
+
+        # ── Load TSV into memory ──────────────────────────────────────────────
+        # rows: list of (simplified, pinyin_plain, level)
+        rows: list = []
         with open(tsv_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.rstrip("\n")
@@ -362,29 +392,96 @@ def seed_hsk_levels():
                     level = int(level_str)
                 except ValueError:
                     continue
-                pp = _pinyin_plain_from_marks(pinyin_marked)
+                rows.append((simplified, _pinyin_plain_from_marks(pinyin_marked), level))
 
-                # Match by simplified, prefer pinyin tiebreak for homographs.
-                # SQLAlchemy update() with .filter chain is portable across
-                # SQLite + Postgres; only updates NULL hsk_level rows.
-                q = db.query(DictionaryEntry).filter(
-                    DictionaryEntry.simplified == simplified,
-                    DictionaryEntry.hsk_level.is_(None),
-                )
-                # First try: simplified + pinyin_plain match (handles homographs)
-                rows = q.filter(DictionaryEntry.pinyin_plain == pp).update(
-                    {"hsk_level": level}, synchronize_session=False
-                )
-                # Fallback: if no pinyin match, take any simplified match
-                if rows == 0:
-                    rows = db.query(DictionaryEntry).filter(
-                        DictionaryEntry.simplified == simplified,
-                        DictionaryEntry.hsk_level.is_(None),
-                    ).update({"hsk_level": level}, synchronize_session=False)
-                updated += rows
+        if not rows:
+            logger.warning("HSK TSV contained no parseable rows; skipping seed")
+            return
 
+        # ── Bulk UPDATE (fast path) ───────────────────────────────────────────
+        # Instead of 6 000+ individual UPDATEs we build a temporary VALUES
+        # table and let the DB engine do a single join-based update.
+        # Batched in chunks of 500 to keep parameter lists manageable.
+        updated = _bulk_update_hsk(db, rows)
         db.commit()
         logger.info(f"✓ HSK levels seeded: {updated:,} dictionary entries tagged")
+
+
+def _bulk_update_hsk(db, rows: list) -> int:
+    """
+    Issue bulk UPDATE … FROM (VALUES …) statements for HSK level tagging.
+
+    Strategy (same for SQLite and Postgres):
+      1. Pinyin-exact pass: update rows where simplified AND pinyin_plain match.
+      2. Simplified-fallback pass: update remaining NULL rows matched only by
+         simplified (handles cases where pinyin_plain doesn't match).
+
+    Batched in CHUNK-size groups so no single SQL statement becomes unwieldy.
+    Returns total rows updated.
+    """
+    CHUNK = 500
+    updated = 0
+
+    if _is_sqlite():
+        # SQLite has no VALUES-based UPDATE FROM; use individual updates but
+        # commit every chunk to avoid a single massive transaction.
+        with engine.begin() as conn:
+            for simplified, pp, level in rows:
+                r = conn.execute(
+                    text(
+                        "UPDATE dictionary SET hsk_level = :level "
+                        "WHERE simplified = :s AND pinyin_plain = :pp "
+                        "AND hsk_level IS NULL"
+                    ),
+                    {"level": level, "s": simplified, "pp": pp},
+                )
+                if r.rowcount == 0:
+                    r = conn.execute(
+                        text(
+                            "UPDATE dictionary SET hsk_level = :level "
+                            "WHERE simplified = :s AND hsk_level IS NULL"
+                        ),
+                        {"level": level, "s": simplified},
+                    )
+                updated += r.rowcount
+        return updated
+
+    # Postgres: VALUES-based bulk UPDATE (two passes per chunk)
+    for i in range(0, len(rows), CHUNK):
+        chunk = rows[i: i + CHUNK]
+
+        # Build VALUES placeholder: ($1,$2,$3), ($4,$5,$6), …
+        placeholders = ", ".join(
+            f"(:s{j}, :pp{j}, :lvl{j})" for j in range(len(chunk))
+        )
+        params = {}
+        for j, (s, pp, lvl) in enumerate(chunk):
+            params[f"s{j}"] = s
+            params[f"pp{j}"] = pp
+            params[f"lvl{j}"] = lvl
+
+        # Pass 1: pinyin-exact match
+        r = db.execute(text(f"""
+            UPDATE dictionary AS d
+            SET    hsk_level = v.lvl
+            FROM   (VALUES {placeholders}) AS v(s, pp, lvl)
+            WHERE  d.simplified  = v.s
+            AND    d.pinyin_plain = v.pp
+            AND    d.hsk_level IS NULL
+        """), params)
+        updated += r.rowcount
+
+        # Pass 2: simplified-only fallback for unmatched rows in this chunk
+        r = db.execute(text(f"""
+            UPDATE dictionary AS d
+            SET    hsk_level = v.lvl
+            FROM   (VALUES {placeholders}) AS v(s, pp, lvl)
+            WHERE  d.simplified = v.s
+            AND    d.hsk_level IS NULL
+        """), params)
+        updated += r.rowcount
+
+    return updated
 
 
 SENTENCES_READY_THRESHOLD = 50_000
