@@ -52,6 +52,14 @@ def get_settings(db):
             from app.models.settings import AppSettings
             try:
                 _settings = db.query(AppSettings).first()
+                if _settings is not None:
+                    # Detach cleanly so subsequent db.commit() calls in the
+                    # same request don't expire the cached object's attributes.
+                    # Scalar values are already in __dict__ from the SELECT.
+                    try:
+                        db.expunge(_settings)
+                    except Exception:
+                        pass  # already detached; safe to ignore
                 _settings_ts = time.monotonic()
             except Exception as e:
                 import logging

@@ -57,7 +57,7 @@ def check_filesystem():
         'uvicorn',
         'requests',
         'sqlalchemy',
-        'google-generativeai',
+        'openai',
         'jieba',
         'edge-tts',
         'pydantic'
@@ -159,11 +159,11 @@ def check_database():
                 settings_dict = dict(zip(columns, settings))
                 
                 # Mask API key
-                if 'gemini_api_key' in settings_dict and settings_dict['gemini_api_key']:
-                    masked_key = settings_dict['gemini_api_key'][:8] + "..." + settings_dict['gemini_api_key'][-4:]
-                    print_info(f"Gemini API Key: {masked_key}")
+                if 'openai_api_key' in settings_dict and settings_dict['openai_api_key']:
+                    masked_key = settings_dict['openai_api_key'][:8] + "..." + settings_dict['openai_api_key'][-4:]
+                    print_info(f"OpenAI API Key: {masked_key}")
                 else:
-                    print_warning("Gemini API Key: NOT SET")
+                    print_warning("OpenAI API Key: NOT SET")
                 
                 if 'anki_deck_name' in settings_dict:
                     print_info(f"Target Deck: {settings_dict['anki_deck_name']}")
@@ -249,77 +249,75 @@ def check_anki():
     return issues
 
 # ============================================================================
-# PHASE 4: GEMINI AI INTEGRATION
+# PHASE 4: OPENAI INTEGRATION
 # ============================================================================
 
-def check_gemini():
-    print_header("PHASE 4: GEMINI AI INTEGRATION")
-    
+def check_openai():
+    print_header("PHASE 4: OPENAI INTEGRATION")
+
     issues = []
     api_key = None
-    
+
     # Try to load API key from .env
     print(f"{Colors.BOLD}Loading API key...{Colors.ENDC}")
-    
+
     if os.path.exists('.env'):
         with open('.env', 'r') as f:
             for line in f:
-                if line.startswith('GEMINI_API_KEY'):
-                    api_key = line.split('=')[1].strip().strip('"\'')
+                if line.startswith('OPENAI_API_KEY'):
+                    api_key = line.split('=', 1)[1].strip().strip('"\'')
                     print_info("API key found in .env")
                     break
-    
+
     # Try from database if not in .env
     if not api_key:
         if os.path.exists('data/chanki.db'):
             try:
                 conn = sqlite3.connect('data/chanki.db')
                 cursor = conn.cursor()
-                cursor.execute("SELECT gemini_api_key FROM settings LIMIT 1")
+                cursor.execute("SELECT openai_api_key FROM settings LIMIT 1")
                 result = cursor.fetchone()
                 if result and result[0]:
                     api_key = result[0]
                     print_info("API key found in database")
                 conn.close()
-            except:
+            except Exception:
                 pass
-    
+
     if not api_key:
-        print_error("CRITICAL: No Gemini API key found")
-        print_info("Set GEMINI_API_KEY in .env or configure in settings")
-        issues.append("Gemini API key missing")
+        print_warning("No OpenAI API key found")
+        print_info("Set OPENAI_API_KEY in .env or configure in Settings")
+        issues.append("OpenAI API key missing")
         return issues
-    
-    # Test Gemini API
-    print(f"\n{Colors.BOLD}Testing Gemini API...{Colors.ENDC}")
-    
+
+    # Test OpenAI — read-only models.list() call, no token cost
+    print(f"\n{Colors.BOLD}Testing OpenAI API (models.list)...{Colors.ENDC}")
+
     try:
-        import google.generativeai as genai
-        
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
         start_time = time.time()
-        response = model.generate_content("Say 'OK'")
+        models = list(client.models.list())
         latency = (time.time() - start_time) * 1000
-        
-        if response and response.text:
-            print_success(f"Gemini API is ONLINE")
-            print_info(f"Latency: {latency:.0f}ms")
-            print_info(f"Response: {response.text.strip()}")
+
+        model_ids = {m.id for m in models}
+        if "gpt-4o-mini" in model_ids:
+            print_success(f"OpenAI API is ONLINE — gpt-4o-mini available")
         else:
-            print_error("Gemini API returned empty response")
-            issues.append("Gemini API empty response")
-    
+            print_success(f"OpenAI API is ONLINE ({len(models)} models listed)")
+            print_warning("gpt-4o-mini not found in model list — check org access")
+        print_info(f"Latency: {latency:.0f}ms")
+
     except ImportError:
-        print_error("google-generativeai library not installed")
-        print_info("Run: pip install google-generativeai")
-        issues.append("google-generativeai not installed")
-    
+        print_error("openai library not installed")
+        print_info("Run: pip install openai")
+        issues.append("openai not installed")
+
     except Exception as e:
-        print_error(f"Gemini API error: {e}")
-        issues.append(f"Gemini API error: {e}")
-    
+        print_error(f"OpenAI API error: {e}")
+        issues.append(f"OpenAI API error: {e}")
+
     return issues
 
 # ============================================================================
@@ -365,7 +363,7 @@ def main():
     all_issues.extend(check_filesystem())
     all_issues.extend(check_database())
     all_issues.extend(check_anki())
-    all_issues.extend(check_gemini())
+    all_issues.extend(check_openai())
     all_issues.extend(check_server())
     
     # Final summary
